@@ -1,0 +1,20 @@
+model two_body_system:
+    type: classical
+    time: 0..100
+    resolution: 0.1
+
+object sun:
+    mass: 1.989e30
+    position: [0, 0, 0]
+    velocity: [0, 0, 0]
+
+object earth:
+    mass: 5.972e24
+    position: [1.496e11, 0, 0]  # 1 AU distance
+    velocity: [0, 29780, 0]     # Initial orbital velocity (m/s)
+
+interaction sun -> earth:
+    force: gravity(G=6.67430e-11)
+
+simulate two_body_system
+visualize earth 

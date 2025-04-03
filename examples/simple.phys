@@ -1,0 +1,12 @@
+model simple_model:
+    type: classical
+    time: 0..1
+    resolution: 0.01
+
+object ball:
+    mass: 1.0
+    position: [0, 0, 0]
+    velocity: [1, 0, 0]
+
+simulate simple_model
+visualize ball 

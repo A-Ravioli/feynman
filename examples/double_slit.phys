@@ -1,0 +1,30 @@
+model double_slit_experiment:
+    type: quantum
+    time: 0..2
+    resolution: 0.01
+
+field screen:
+    type: detector
+    position: [5, 0, 0]
+    resolution: 1000
+
+atom electron:
+    mass: 9.11e-31
+    charge: -1.6e-19
+    initial_state:
+        wavefunction: gaussian(center=-5.0, spread=0.5, k=5.0)
+
+field barrier:
+    type: barrier
+    position: [0, 0, 0]
+    holes: [[-0.5, -0.3], [0.3, 0.5]]
+
+interaction electron -> barrier:
+    potential: double_slit(position=0.0, slit_width=0.2, slit_separation=0.8)
+
+interaction electron -> screen:
+    action: measure(position)
+    collapse: True
+
+simulate double_slit_experiment
+visualize electron 

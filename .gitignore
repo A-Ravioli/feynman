@@ -1,0 +1,36 @@
+# Start Generation Here
+# Python cache files
+__pycache__/
+*.py[cod]
+
+# Distribution / packaging
+.Python
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+*.egg-info/
+dist/
+build/
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints
+
+# Visual Studio Code settings
+.vscode/
+
+# PyCharm settings
+.idea/
+
+# MacOS system files
+.DS_Store
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+# End Generation Here
+
+.venv

@@ -1,0 +1,57 @@
+start: (_EMPTY_LINE | declaration | statement)*
+
+declaration: model | entity | field | interaction
+statement: simulate | visualize
+_EMPTY_LINE: _NL
+
+// Model declaration
+model: "model" NAME ":" _NL _INDENT model_props _DEDENT
+model_props: model_prop+
+model_prop: NAME ":" value _NL
+
+// Entity declarations (object or atom)
+entity: entity_type NAME ":" _NL _INDENT entity_props _DEDENT
+entity_type: "object" | "atom"
+entity_props: entity_prop+
+entity_prop: NAME ":" (value | dict_block) _NL
+
+// Field declaration
+field: "field" NAME ":" _NL _INDENT field_props _DEDENT
+field_props: field_prop+
+field_prop: NAME ":" value _NL
+
+// Interaction declaration
+interaction: "interaction" NAME "->" NAME ":" _NL _INDENT interaction_props _DEDENT
+interaction_props: interaction_prop+
+interaction_prop: NAME ":" value _NL
+
+// Simulation statements
+simulate: "simulate" NAME _NL
+visualize: "visualize" NAME ["on" NAME] _NL
+
+// Value types
+value: string | number | boolean | array | function_call | range | NAME
+string: ESCAPED_STRING
+number: FLOAT | INT | fraction
+fraction: INT "/" INT
+boolean: "True" | "False"
+array: "[" [value ("," value)*] "]"
+function_call: NAME "(" [param ("," param)*] ")"
+param: NAME "=" value | value
+dict_block: _NL _INDENT dict_items _DEDENT
+dict_items: (NAME ":" value _NL)+
+range: INT ".." INT
+
+// Terminals
+NAME: /[a-zA-Z_][a-zA-Z0-9_]*/
+COMMENT: /#.*/
+INT: /\d+/
+FLOAT: /\d+\.\d+/ | /\d+[eE][+-]?\d+/ | /\d+\.\d+[eE][+-]?\d+/
+_NL: /\r?\n[\t ]*/
+_INDENT: "<INDENT>"
+_DEDENT: "<DEDENT>"
+
+%import common.ESCAPED_STRING
+%import common.WS_INLINE
+%ignore WS_INLINE
+%ignore COMMENT 
