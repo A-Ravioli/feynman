@@ -127,7 +127,7 @@ visualize earth
 
 ## License
 
-MIT
+[MIT](LICENSE.md)
 
 ## Contributing
 
