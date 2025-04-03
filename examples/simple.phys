@@ -6,7 +6,34 @@ model simple_model:
 object ball:
     mass: 1.0
     position: [0, 0, 0]
-    velocity: [1, 0, 0]
+    velocity: [1, 1, 0.5]
+    shape: sphere
+    size: 0.5
+    color: red
+
+object cube:
+    mass: 2.0
+    position: [-2, 0, 0]
+    velocity: [0.5, 0, 0]
+    shape: cube
+    size: 1.0
+    color: blue
+
+object box:
+    mass: 1.5
+    position: [0, -2, 0]
+    velocity: [0, 0.5, 0.2]
+    shape: rectangle
+    width: 1.5
+    height: 0.8
+    depth: 0.5
+    color: green
+
+interaction ball -> cube:
+    force: gravity
+    G: 6.67e-11
 
 simulate simple_model
-visualize ball 
+visualize ball
+visualize cube
+visualize box 

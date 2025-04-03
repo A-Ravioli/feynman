@@ -5,8 +5,7 @@ setup(
     version="0.1.0",
     description="A universal DSL for classical and quantum physics simulations",
     author="Feynman Team",
-    packages=find_packages("src"),
-    package_dir={"": "src"},
+    packages=find_packages(),
     install_requires=[
         "lark>=1.1.5",
         "numpy>=1.22.0",

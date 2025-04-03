@@ -11,40 +11,75 @@ class Model(Node):
     name: str
     properties: Dict[str, Any]
     
+    def __init__(self, name=None, properties=None):
+        self.name = name
+        self.properties = properties or {}
+    
     def get_type(self) -> str:
         return self.properties.get("type", "classical")
     
-    def get_time_range(self) -> tuple:
+    def get_time_range(self):
+        """Get the time range as (start, end)"""
         time_str = self.properties.get("time", "0..1")
         
-        # Handle the case where it's already a float (for compatibility)
+        # Handle if time is already a tuple/list
+        if isinstance(time_str, (list, tuple)) and len(time_str) == 2:
+            return float(time_str[0]), float(time_str[1])
+        
+        # Handle if time is already a float (single value)
         if isinstance(time_str, (int, float)):
             return 0.0, float(time_str)
         
-        # Handle the case where it's a string with a range like "0..1"
-        if isinstance(time_str, str) and ".." in time_str:
-            start, end = time_str.split("..")
-            # Handle units (like 's' for seconds)
-            start_val = float(start.replace('s', '')) if 's' in start else float(start)
-            end_val = float(end.replace('s', '')) if 's' in end else float(end)
-            return start_val, end_val
+        # Handle string formats like "0..1" or "0 to 1"
+        if isinstance(time_str, str):
+            if ".." in time_str:
+                start, end = time_str.split("..")
+                return float(start.strip()), float(end.strip())
+            elif " to " in time_str:
+                start, end = time_str.split(" to ")
+                return float(start.strip()), float(end.strip())
+            else:
+                # If it's just a single number like "5s", treat it as end time
+                # Remove any units (like 's' for seconds)
+                time_val = time_str.strip()
+                for unit in ["s", "ms", "us", "ns"]:
+                    if time_val.endswith(unit):
+                        time_val = time_val[:-len(unit)]
+                        break
+                try:
+                    end = float(time_val)
+                    return 0.0, end
+                except ValueError:
+                    # Default if parsing fails
+                    return 0.0, 1.0
         
-        # Default case
+        # Default
         return 0.0, 1.0
     
-    def get_resolution(self) -> float:
-        res = self.properties.get("resolution", "0.01")
+    def get_resolution(self):
+        """Get the time step resolution"""
+        res = self.properties.get("resolution", 0.01)
         
-        # Handle the case where it's already a float (for compatibility)
+        # Handle if resolution is already a float
         if isinstance(res, (int, float)):
             return float(res)
         
-        # Handle the case where it's a string with units
-        if isinstance(res, str) and 's' in res:
-            return float(res.replace('s', ''))
+        # Handle string format
+        if isinstance(res, str):
+            # Remove any units (like 's' for seconds)
+            res_val = res.strip()
+            for unit in ["s", "ms", "us", "ns"]:
+                if res_val.endswith(unit):
+                    res_val = res_val[:-len(unit)]
+                    break
+            try:
+                return float(res_val)
+            except ValueError:
+                # Default if parsing fails
+                return 0.01
         
-        # Default case
-        return float(res) if res else 0.01
+        # Default
+        return 0.01
 
 @dataclass
 class Object(Node):

@@ -192,7 +192,57 @@ class PhysicaLangCLI:
                 }
                 .classical { background-color: #f1c40f; color: black; padding: 3px 6px; border-radius: 3px; }
                 .quantum { background-color: #9b59b6; color: white; padding: 3px 6px; border-radius: 3px; }
+                .tabs {
+                    display: flex;
+                    border-bottom: 1px solid #ddd;
+                    margin-bottom: 10px;
+                }
+                .tab {
+                    padding: 10px 20px;
+                    cursor: pointer;
+                    background-color: #f8f8f8;
+                    border: 1px solid #ddd;
+                    border-bottom: none;
+                    margin-right: 5px;
+                    border-radius: 5px 5px 0 0;
+                }
+                .tab.active {
+                    background-color: #3498db;
+                    color: white;
+                    border-color: #3498db;
+                }
+                .tab-content {
+                    display: none;
+                }
+                .tab-content.active {
+                    display: block;
+                }
+                .visualization-3d {
+                    margin-top: 20px;
+                    text-align: center;
+                }
             </style>
+            <script>
+                function switchTab(evt, tabName, entity) {
+                    // Hide all tab contents
+                    var tabContents = document.querySelectorAll(`[data-entity='${entity}'] .tab-content`);
+                    for (var i = 0; i < tabContents.length; i++) {
+                        tabContents[i].classList.remove('active');
+                    }
+                    
+                    // Deactivate all tabs
+                    var tabs = document.querySelectorAll(`[data-entity='${entity}'] .tab`);
+                    for (var i = 0; i < tabs.length; i++) {
+                        tabs[i].classList.remove('active');
+                    }
+                    
+                    // Show the selected tab content
+                    document.getElementById(`${tabName}-${entity}`).classList.add('active');
+                    
+                    // Activate the selected tab
+                    evt.currentTarget.classList.add('active');
+                }
+            </script>
         </head>
         <body>
             <div class="header">
@@ -219,11 +269,21 @@ class PhysicaLangCLI:
                         type_class = "quantum" if entity_type == "atom" else "classical"
                         
                         html += f"""
-                        <div class="entity">
+                        <div class="entity" data-entity="{entity_name}">
                             <h3>{entity_name} <span class="{type_class}">{entity_type}</span></h3>
+                            
+                            <div class="tabs">
+                                <div class="tab active" onclick="switchTab(event, '2d', '{entity_name}')">2D View</div>
+                                <div class="tab" onclick="switchTab(event, '3d', '{entity_name}')">3D View</div>
+                            </div>
                         """
                         
-                        # Add visualizations
+                        # 2D visualizations tab content (default visible)
+                        html += f"""
+                        <div id="2d-{entity_name}" class="tab-content active">
+                        """
+                        
+                        # Add 2D visualizations
                         if "visualization_results" in results:
                             for vis_result in results["visualization_results"]:
                                 if entity_name in vis_result:
@@ -265,7 +325,41 @@ class PhysicaLangCLI:
                                         </div>
                                         """
                         
-                        html += "</div>"  # Close entity div
+                        html += "</div>"  # Close 2D tab content
+                        
+                        # 3D visualizations tab content (initially hidden)
+                        html += f"""
+                        <div id="3d-{entity_name}" class="tab-content">
+                        """
+                        
+                        # Add 3D visualizations
+                        if "visualization3d_results" in results:
+                            for vis3d_result in results["visualization3d_results"]:
+                                if entity_name in vis3d_result:
+                                    entity_vis3d = vis3d_result[entity_name]
+                                    
+                                    # Add 3D scene
+                                    if "scene_3d" in entity_vis3d:
+                                        html += f"""
+                                        <div class="visualization-3d">
+                                            <h4>3D Visualization (t={entity_vis3d.get('time', 0):.2f})</h4>
+                                            <img src="data:image/png;base64,{entity_vis3d['scene_3d']}" alt="3D Scene">
+                                        </div>
+                                        """
+                                    
+                                    # Add 3D animation if available
+                                    if "animation_3d" in entity_vis3d:
+                                        html += f"""
+                                        <div class="visualization-3d">
+                                            <h4>3D Animation</h4>
+                                            <img src="data:image/gif;base64,{entity_vis3d['animation_3d']}" alt="3D Animation">
+                                        </div>
+                                        """
+                        
+                        html += """
+                        </div>  <!-- Close 3D tab content -->
+                        </div>  <!-- Close entity div -->
+                        """
                 
                 html += "</div>"  # Close section div
         

@@ -2,7 +2,7 @@ import re
 from typing import Dict, List, Any, Optional, Tuple
 import json
 
-from ..interpreter.ast import (
+from feynman.interpreter.ast import (
     Program, Model, Object, Atom, Field, 
     Interaction, Simulate, Visualize
 )
