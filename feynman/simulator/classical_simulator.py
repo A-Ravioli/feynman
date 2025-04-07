@@ -110,68 +110,62 @@ class ClassicalSimulator:
             masses[name] = float(self.entities[name]["properties"].get("mass", 1.0))
         
         # For each object, set velocity derivatives (accelerations)
+        # We need to calculate all forces first, then apply accelerations
+        forces = {obj_name: np.zeros(3) for obj_name in object_names[:num_objects]}
+
+        for interaction in self.interactions:
+            source = interaction["source"]
+            target = interaction["target"]
+            
+            # Ensure both source and target are simulated classical objects
+            if source not in positions or target not in positions:
+                continue 
+                
+            props = interaction["properties"]
+            if "force" not in props:
+                continue
+
+            force_info = props["force"]
+            if isinstance(force_info, str):
+                force_name = force_info
+                force_params = {}
+            elif isinstance(force_info, dict) and "function" in force_info:
+                force_name = force_info["function"]
+                force_params = {}
+                for arg in force_info.get("args", []):
+                     if isinstance(arg, dict) and "param" in arg and "value" in arg:
+                         force_params[arg["param"]] = arg["value"]
+            else:
+                continue
+
+            if force_name in self.force_functions:
+                force_func = self.force_functions[force_name]
+                # Calculate the force exerted BY source ON target
+                force_on_target = force_func(
+                    pos1=positions[source],
+                    pos2=positions[target],
+                    mass1=masses[source],
+                    mass2=masses[target],
+                    **force_params
+                )
+                
+                # Apply force to target
+                forces[target] += force_on_target
+                # Apply reaction force to source (Newton's 3rd Law)
+                forces[source] -= force_on_target
+
+        # Now apply forces to calculate accelerations
         for i, name in enumerate(object_names[:num_objects]):
             base_idx = i * 6
             
             # Position derivatives = velocities
             derivatives[base_idx:base_idx+3] = velocities[name]
             
-            # Calculate forces on this object from all interactions
-            net_force = np.zeros(3)
-            
-            for interaction in self.interactions:
-                source = interaction["source"]
-                target = interaction["target"]
-                props = interaction["properties"]
-                
-                # Skip non-force interactions
-                if "force" not in props:
-                    continue
-                
-                # Skip interactions not involving this object
-                if source != name and target != name:
-                    continue
-                
-                # Determine the other object in the interaction
-                other = target if source == name else source
-                if other not in positions:
-                    continue
-                
-                # Calculate the force
-                force_info = props["force"]
-                if isinstance(force_info, str):
-                    # Handle simple force name
-                    force_name = force_info
-                    force_params = {}
-                elif isinstance(force_info, dict) and "function" in force_info:
-                    # Handle function call with parameters
-                    force_name = force_info["function"]
-                    force_params = {}
-                    for arg in force_info.get("args", []):
-                        if isinstance(arg, dict) and "param" in arg and "value" in arg:
-                            force_params[arg["param"]] = arg["value"]
-                else:
-                    continue
-                
-                if force_name in self.force_functions:
-                    force_func = self.force_functions[force_name]
-                    force = force_func(
-                        pos1=positions[name],
-                        pos2=positions[other],
-                        mass1=masses[name],
-                        mass2=masses[other],
-                        **force_params
-                    )
-                    
-                    # If this object is the target, the force acts on it directly
-                    # If it's the source, reverse the force (Newton's third law)
-                    if name == target:
-                        net_force += force
-                    else:
-                        net_force -= force
-            
-            # F = ma => a = F/m
-            derivatives[base_idx+3:base_idx+6] = net_force / masses[name]
+            # Acceleration = F / m
+            if masses[name] != 0:
+                 derivatives[base_idx+3:base_idx+6] = forces[name] / masses[name]
+            else:
+                 derivatives[base_idx+3:base_idx+6] = np.zeros(3) # Avoid division by zero
         
         return derivatives
     

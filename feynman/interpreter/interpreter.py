@@ -7,7 +7,6 @@ from feynman.interpreter.ast_builder import ASTBuilder
 from feynman.interpreter.ast import Program, Model, Object, Atom, Field, Interaction
 from feynman.simulator.classical_simulator import ClassicalSimulator
 from feynman.simulator.quantum_simulator import QuantumSimulator
-from feynman.visualizer.visualizer import Visualizer
 from feynman.visualizer.visualizer3d import Visualizer3D
 from feynman.visualizer.enhanced_visualizer import EnhancedVisualizer
 
@@ -20,12 +19,13 @@ class Interpreter:
         self.simulation_results = {}
         self.classical_simulator = ClassicalSimulator()
         self.quantum_simulator = QuantumSimulator()
-        self.visualizer = Visualizer()
         self.visualizer3d = Visualizer3D()
         self.enhanced_visualizer = EnhancedVisualizer()
     
     def interpret(self, code: str) -> Dict[str, Any]:
-        """Interpret PhysicaLang code and return results"""
+        """Interpret PhysicaLang code and return simulation results only.
+           Visualization is now handled separately after interpretation.
+        """
         try:
             # First try our simple parser which is more robust
             self.program = self.simple_parser.parse(code)
@@ -39,28 +39,17 @@ class Interpreter:
         for simulate in self.program.simulations:
             self._run_simulation(simulate.model_name)
         
-        # Process visualizations
-        vis_results = []
-        vis3d_results = []
-        
-        for visualize in self.program.visualizations:
-            # Create standard 2D visualizations
-            vis_result = self._create_visualization(
-                visualize.entity_name, visualize.target_name
-            )
-            vis_results.append(vis_result)
-            
-            # Create 3D visualization if applicable
-            vis3d_result = self._create_3d_visualization(
-                visualize.entity_name, visualize.target_name
-            )
-            if vis3d_result:
-                vis3d_results.append(vis3d_result)
-        
+        # Return only simulation results
+        # The structure might need adjusting depending on how results are used
+        # For now, assume the calling code expects this structure
+        # If the structure included visualization results previously, 
+        # that needs to be handled by the caller now. 
         return {
             "simulation_results": self.simulation_results,
-            "visualization_results": vis_results,
-            "visualization3d_results": vis3d_results
+            # Add other necessary keys if the structure was different, e.g.:
+            "time_points": self.simulation_results.get(list(self.simulation_results.keys())[0], {}).get('time_points', []) if self.simulation_results else [],
+            "entities": self.simulation_results.get(list(self.simulation_results.keys())[0], {}).get('entities', {}) if self.simulation_results else {},
+            "simulation_params": self.simulation_results.get(list(self.simulation_results.keys())[0], {}).get('simulation_params', {}) if self.simulation_results else {}
         }
     
     def _run_simulation(self, model_name: str) -> Dict[str, Any]:
@@ -193,103 +182,6 @@ class Interpreter:
         
         self.simulation_results[model_name] = result
         return result
-    
-    def _create_visualization(self, entity_name: str, target_name: Optional[str] = None) -> Dict[str, Any]:
-        """Create a visualization for the given entity"""
-        # Find which simulation contains this entity
-        sim_data = None
-        for model_name, sim_result in self.simulation_results.items():
-            if entity_name in sim_result["entities"]:
-                sim_data = sim_result
-                break
-        
-        if not sim_data:
-            # Entity not found in simulation results - return empty result with warning message
-            return {entity_name: {"error": f"Entity '{entity_name}' not found in simulation results"}}
-        
-        # Get entity data
-        entity_data = sim_data["entities"][entity_name]
-        
-        # Get target data if specified
-        target_data = None
-        if target_name and target_name in sim_data["entities"]:
-            target_data = sim_data["entities"][target_name]
-        
-        # Create visualization
-        vis_result = self.visualizer.visualize(
-            entity_name=entity_name,
-            entity_data=entity_data,
-            time_points=sim_data["time_points"],
-            target_name=target_name,
-            target_data=target_data
-        )
-        
-        return {entity_name: vis_result}
-    
-    def _create_3d_visualization(self, entity_name: str, target_name: Optional[str] = None) -> Dict[str, Any]:
-        """Create a 3D visualization for the given entity"""
-        # Find which simulation contains this entity
-        sim_data = None
-        for model_name, sim_result in self.simulation_results.items():
-            if "entities" in sim_result and entity_name in sim_result["entities"]:
-                sim_data = sim_result
-                break
-        
-        if not sim_data:
-            # Entity not found in simulation results - return empty result with warning message
-            return {entity_name: {"error": f"Entity '{entity_name}' not found in 3D visualization"}}
-        
-        # Get entity data 
-        entities = sim_data["entities"]
-        time_points = sim_data["time_points"]
-        
-        # Additional entity check
-        if entity_name not in entities:
-            return {entity_name: {"error": f"Entity '{entity_name}' not found in entities"}}
-        
-        entity_data = entities[entity_name]
-        
-        try:
-            # Create static 3D visualization at final time step
-            final_frame = self.visualizer3d.visualize_scene(
-                entities=entities,
-                time_points=time_points,
-                time_index=-1  # Final time step
-            )
-            
-            # Create animation if we have trajectory data
-            has_trajectory = False
-            if entity_data.get("type") == "object" and len(entity_data.get("positions", [])) > 1:
-                has_trajectory = True
-            elif entity_data.get("type") == "atom" and len(entity_data.get("expected_position", [])) > 1:
-                has_trajectory = True
-            
-            animation_data = None
-            if has_trajectory:
-                animation_data = self.visualizer3d.create_animation(
-                    entities=entities,
-                    time_points=time_points,
-                    num_frames=30
-                )
-            
-            vis_result = {
-                "scene_3d": final_frame["scene_3d"],
-                "time": final_frame["time"]
-            }
-            
-            if animation_data:
-                vis_result["animation_3d"] = animation_data
-                vis_result["animation_type"] = "gif"
-            
-            return {entity_name: vis_result}
-        except Exception as e:
-            # Return error message if visualization fails
-            import traceback
-            error_info = traceback.format_exc()
-            print(f"Error in 3D visualization: {error_info}")
-            return {entity_name: {"error": f"Error creating 3D visualization: {str(e)}"}}
-        
-        return None 
 
     def _create_3d_visualization(self, ast, sim_result, entity_name):
         """Create a 3D visualization from simulation results."""

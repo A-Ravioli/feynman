@@ -3,20 +3,51 @@ import argparse
 import sys
 import os
 import json
-import webbrowser
-import tempfile
-from pathlib import Path
+import numpy as np
 from typing import Dict, Any
 
 from .interpreter.interpreter import Interpreter
 from .visualizer.visualizer import Visualizer
+
+# Helper function to convert loaded JSON lists back to numpy arrays if needed
+# This might be necessary if the simulator saves arrays directly
+# Adjust based on how results are actually saved/loaded
+def _load_results_with_numpy(file_path: str) -> Dict[str, Any]:
+    with open(file_path, 'r') as f:
+        data = json.load(f)
+
+    # Recursively convert lists back to numpy arrays where appropriate
+    # This is a basic example; might need refinement based on actual data structure
+    def convert_to_numpy(item):
+        if isinstance(item, dict):
+            # Handle complex number dicts saved by old _make_json_serializable
+            if 'real' in item and 'imag' in item and len(item) == 2:
+                 real_part = np.array(item['real'])
+                 imag_part = np.array(item['imag'])
+                 return real_part + 1j * imag_part
+            # Recursively check other dicts
+            return {k: convert_to_numpy(v) for k, v in item.items()}
+        elif isinstance(item, list):
+            # Attempt conversion if list contains numbers
+            try:
+                arr = np.array(item)
+                # Only convert if it looks like numerical data (e.g., not list of strings)
+                if np.issubdtype(arr.dtype, np.number) or np.issubdtype(arr.dtype, np.complexfloating):
+                    return arr
+                else:
+                    return [convert_to_numpy(sub_item) for sub_item in item] # Convert list items recursively
+            except (ValueError, TypeError):
+                 # If conversion fails, return list with items converted recursively
+                 return [convert_to_numpy(sub_item) for sub_item in item]
+        return item
+        
+    return convert_to_numpy(data)
 
 class PhysicaLangCLI:
     """Command-line interface for PhysicaLang"""
     
     def __init__(self):
         self.interpreter = Interpreter()
-        self.visualizer = Visualizer()
     
     def run(self, args=None):
         """Run the CLI with the given arguments"""
@@ -24,7 +55,7 @@ class PhysicaLangCLI:
         parsed_args = parser.parse_args(args)
         
         if parsed_args.subcommand == "run":
-            self.run_simulation(parsed_args.file[0], parsed_args.visualize)
+            self.run_simulation(parsed_args.file[0], parsed_args.output, parsed_args.visualize)
         elif parsed_args.subcommand == "visualize":
             self.visualize_results(parsed_args.results[0])
         else:
@@ -41,12 +72,12 @@ class PhysicaLangCLI:
         run_parser = subparsers.add_parser("run", help="Run a physics simulation from a PhysicaLang script")
         run_parser.add_argument("file", nargs=1, help="PhysicaLang script file")
         run_parser.add_argument(
-            "--output", "-o", 
+            "--output", "-o", default="results.json",
             help="Output file for simulation results (default: results.json)"
         )
         run_parser.add_argument(
             "--visualize", "-v", action="store_true",
-            help="Visualize results after simulation"
+            help="Launch interactive visualizer after simulation"
         )
         
         # Visualize results command
@@ -55,7 +86,7 @@ class PhysicaLangCLI:
         
         return parser
     
-    def run_simulation(self, script_file: str, visualize=False):
+    def run_simulation(self, script_file: str, output_file: str, visualize=False):
         """Run a simulation from a PhysicaLang script file"""
         if not os.path.exists(script_file):
             print(f"Error: File '{script_file}' not found")
@@ -71,17 +102,21 @@ class PhysicaLangCLI:
             results = self.interpreter.interpret(code)
             
             # Save results
-            output_file = "results.json"
+            print(f"Saving simulation results to {output_file}...")
+            # Ensure parent directory exists
+            os.makedirs(os.path.dirname(output_file) or '.', exist_ok=True)
             with open(output_file, "w") as f:
-                # Convert NumPy arrays to lists for JSON serialization
+                # Use the existing serializer for saving
                 serializable_results = self._make_json_serializable(results)
                 json.dump(serializable_results, f, indent=2)
             
             print(f"Simulation completed. Results saved to {output_file}")
             
-            # Generate visualization if requested
+            # Launch visualization if requested
             if visualize:
-                self.visualize_results(output_file)
+                # Load results back (potentially converting arrays)
+                loaded_results = _load_results_with_numpy(output_file)
+                self.launch_visualizer(loaded_results)
             
         except Exception as e:
             print(f"Error running simulation: {str(e)}")
@@ -95,22 +130,12 @@ class PhysicaLangCLI:
             print(f"Error: Results file '{results_file}' not found")
             sys.exit(1)
         
-        print(f"Visualizing results from {results_file}...")
+        print(f"Loading results from {results_file} for visualization...")
         
         try:
-            with open(results_file, "r") as f:
-                results = json.load(f)
-            
-            # Generate HTML visualization
-            html = self._generate_html_report(results)
-            
-            # Save to a temporary file and open in browser
-            with tempfile.NamedTemporaryFile(suffix=".html", delete=False) as f:
-                f.write(html.encode("utf-8"))
-                html_file = f.name
-            
-            print(f"Opening visualization in browser...")
-            webbrowser.open(f"file://{html_file}")
+            # Load results (potentially converting arrays)
+            loaded_results = _load_results_with_numpy(results_file)
+            self.launch_visualizer(loaded_results)
             
         except Exception as e:
             print(f"Error visualizing results: {str(e)}")
@@ -118,13 +143,22 @@ class PhysicaLangCLI:
             traceback.print_exc()
             sys.exit(1)
     
+    def launch_visualizer(self, results: Dict[str, Any]):
+        """Instantiates and runs the new Dash visualizer."""
+        print("Launching interactive visualizer...")
+        visualizer = Visualizer(results) # Instantiates the Dash app
+        # The run_server method now blocks until the server is stopped
+        visualizer.run_server(debug=False) # Set debug=True for development
+        print("Visualizer closed.")
+    
     def _make_json_serializable(self, obj):
         """Convert NumPy arrays to lists for JSON serialization"""
-        import numpy as np
-        
         if isinstance(obj, np.ndarray):
+            # Handle complex arrays separately
             if np.iscomplexobj(obj):
+                # Save complex as dict of real/imag lists
                 return {
+                    "__complex__": True, # Add marker for easier loading
                     "real": obj.real.tolist(),
                     "imag": obj.imag.tolist()
                 }
@@ -133,242 +167,18 @@ class PhysicaLangCLI:
             return {k: self._make_json_serializable(v) for k, v in obj.items()}
         elif isinstance(obj, list):
             return [self._make_json_serializable(item) for item in obj]
-        elif isinstance(obj, (np.int32, np.int64)):
+        elif isinstance(obj, (np.int_, np.intc, np.intp, np.int8, np.int16, np.int32, np.int64, np.uint8, np.uint16, np.uint32, np.uint64)):
             return int(obj)
-        elif isinstance(obj, (np.float32, np.float64)):
+        elif isinstance(obj, (np.float64, np.float16, np.float32, np.float64)):
             return float(obj)
-        elif isinstance(obj, complex):
-            return {"real": obj.real, "imag": obj.imag}
+        elif isinstance(obj, (np.complex128, np.complex64, np.complex128)):
+             # Save complex scalars as dict
+             return {"__complex__": True, "real": obj.real, "imag": obj.imag}
+        elif isinstance(obj, (np.bool_)):
+            return bool(obj)
+        elif isinstance(obj, (np.void)): # For structured arrays, if any
+             return None # Or handle appropriately
         return obj
-    
-    def _generate_html_report(self, results: Dict[str, Any]) -> str:
-        """Generate an HTML report for visualization results"""
-        html = """
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <title>PhysicaLang Simulation Results</title>
-            <style>
-                body {
-                    font-family: Arial, sans-serif;
-                    max-width: 1200px;
-                    margin: 0 auto;
-                    padding: 20px;
-                    background-color: #f5f5f5;
-                }
-                .header {
-                    background-color: #3498db;
-                    color: white;
-                    padding: 15px;
-                    border-radius: 5px;
-                    margin-bottom: 20px;
-                }
-                .section {
-                    background-color: white;
-                    padding: 15px;
-                    margin-bottom: 20px;
-                    border-radius: 5px;
-                    box-shadow: 0 1px 3px rgba(0,0,0,0.12);
-                }
-                .entity {
-                    margin-bottom: 30px;
-                    padding-bottom: 20px;
-                    border-bottom: 1px solid #eee;
-                }
-                img {
-                    max-width: 100%;
-                    height: auto;
-                    border: 1px solid #ddd;
-                    border-radius: 5px;
-                    display: block;
-                    margin: 10px 0;
-                }
-                h1, h2, h3 {
-                    color: #2c3e50;
-                }
-                .animation {
-                    text-align: center;
-                    margin: 20px 0;
-                }
-                .classical { background-color: #f1c40f; color: black; padding: 3px 6px; border-radius: 3px; }
-                .quantum { background-color: #9b59b6; color: white; padding: 3px 6px; border-radius: 3px; }
-                .tabs {
-                    display: flex;
-                    border-bottom: 1px solid #ddd;
-                    margin-bottom: 10px;
-                }
-                .tab {
-                    padding: 10px 20px;
-                    cursor: pointer;
-                    background-color: #f8f8f8;
-                    border: 1px solid #ddd;
-                    border-bottom: none;
-                    margin-right: 5px;
-                    border-radius: 5px 5px 0 0;
-                }
-                .tab.active {
-                    background-color: #3498db;
-                    color: white;
-                    border-color: #3498db;
-                }
-                .tab-content {
-                    display: none;
-                }
-                .tab-content.active {
-                    display: block;
-                }
-                .visualization-3d {
-                    margin-top: 20px;
-                    text-align: center;
-                }
-            </style>
-            <script>
-                function switchTab(evt, tabName, entity) {
-                    // Hide all tab contents
-                    var tabContents = document.querySelectorAll(`[data-entity='${entity}'] .tab-content`);
-                    for (var i = 0; i < tabContents.length; i++) {
-                        tabContents[i].classList.remove('active');
-                    }
-                    
-                    // Deactivate all tabs
-                    var tabs = document.querySelectorAll(`[data-entity='${entity}'] .tab`);
-                    for (var i = 0; i < tabs.length; i++) {
-                        tabs[i].classList.remove('active');
-                    }
-                    
-                    // Show the selected tab content
-                    document.getElementById(`${tabName}-${entity}`).classList.add('active');
-                    
-                    // Activate the selected tab
-                    evt.currentTarget.classList.add('active');
-                }
-            </script>
-        </head>
-        <body>
-            <div class="header">
-                <h1>PhysicaLang Simulation Results</h1>
-            </div>
-        """
-        
-        # Add simulation results section
-        if "simulation_results" in results:
-            sim_results = results["simulation_results"]
-            
-            for model_name, model_results in sim_results.items():
-                html += f"""
-                <div class="section">
-                    <h2>Model: {model_name}</h2>
-                """
-                
-                # Add entity sections
-                if "entities" in model_results:
-                    entities = model_results["entities"]
-                    
-                    for entity_name, entity_data in entities.items():
-                        entity_type = entity_data.get("type", "unknown")
-                        type_class = "quantum" if entity_type == "atom" else "classical"
-                        
-                        html += f"""
-                        <div class="entity" data-entity="{entity_name}">
-                            <h3>{entity_name} <span class="{type_class}">{entity_type}</span></h3>
-                            
-                            <div class="tabs">
-                                <div class="tab active" onclick="switchTab(event, '2d', '{entity_name}')">2D View</div>
-                                <div class="tab" onclick="switchTab(event, '3d', '{entity_name}')">3D View</div>
-                            </div>
-                        """
-                        
-                        # 2D visualizations tab content (default visible)
-                        html += f"""
-                        <div id="2d-{entity_name}" class="tab-content active">
-                        """
-                        
-                        # Add 2D visualizations
-                        if "visualization_results" in results:
-                            for vis_result in results["visualization_results"]:
-                                if entity_name in vis_result:
-                                    entity_vis = vis_result[entity_name]
-                                    
-                                    # Add plots
-                                    if entity_type == "object":
-                                        if "trajectory_plot" in entity_vis:
-                                            html += f"""
-                                            <h4>Trajectory</h4>
-                                            <img src="data:image/png;base64,{entity_vis['trajectory_plot']}" alt="Trajectory">
-                                            """
-                                        
-                                        if "energy_plot" in entity_vis:
-                                            html += f"""
-                                            <h4>Energy</h4>
-                                            <img src="data:image/png;base64,{entity_vis['energy_plot']}" alt="Energy">
-                                            """
-                                    
-                                    elif entity_type == "atom":
-                                        if "wavefunction_plot" in entity_vis:
-                                            html += f"""
-                                            <h4>Wavefunction</h4>
-                                            <img src="data:image/png;base64,{entity_vis['wavefunction_plot']}" alt="Wavefunction">
-                                            """
-                                        
-                                        if "probability_evolution" in entity_vis:
-                                            html += f"""
-                                            <h4>Probability Density Evolution</h4>
-                                            <img src="data:image/png;base64,{entity_vis['probability_evolution']}" alt="Probability Density Evolution">
-                                            """
-                                    
-                                    # Add animation if available
-                                    if "animation" in entity_vis:
-                                        html += f"""
-                                        <div class="animation">
-                                            <h4>Animation</h4>
-                                            <img src="data:image/gif;base64,{entity_vis['animation']}" alt="Animation">
-                                        </div>
-                                        """
-                        
-                        html += "</div>"  # Close 2D tab content
-                        
-                        # 3D visualizations tab content (initially hidden)
-                        html += f"""
-                        <div id="3d-{entity_name}" class="tab-content">
-                        """
-                        
-                        # Add 3D visualizations
-                        if "visualization3d_results" in results:
-                            for vis3d_result in results["visualization3d_results"]:
-                                if entity_name in vis3d_result:
-                                    entity_vis3d = vis3d_result[entity_name]
-                                    
-                                    # Add 3D scene
-                                    if "scene_3d" in entity_vis3d:
-                                        html += f"""
-                                        <div class="visualization-3d">
-                                            <h4>3D Visualization (t={entity_vis3d.get('time', 0):.2f})</h4>
-                                            <img src="data:image/png;base64,{entity_vis3d['scene_3d']}" alt="3D Scene">
-                                        </div>
-                                        """
-                                    
-                                    # Add 3D animation if available
-                                    if "animation_3d" in entity_vis3d:
-                                        html += f"""
-                                        <div class="visualization-3d">
-                                            <h4>3D Animation</h4>
-                                            <img src="data:image/gif;base64,{entity_vis3d['animation_3d']}" alt="3D Animation">
-                                        </div>
-                                        """
-                        
-                        html += """
-                        </div>  <!-- Close 3D tab content -->
-                        </div>  <!-- Close entity div -->
-                        """
-                
-                html += "</div>"  # Close section div
-        
-        html += """
-        </body>
-        </html>
-        """
-        
-        return html
 
 def main():
     """Main entry point for the CLI"""
