@@ -7,9 +7,6 @@ from feynman.interpreter.ast_builder import ASTBuilder
 from feynman.interpreter.ast import Program, Model, Object, Atom, Field, Interaction
 from feynman.simulator.classical_simulator import ClassicalSimulator
 from feynman.simulator.quantum_simulator import QuantumSimulator
-from feynman.visualizer.visualizer import Visualizer
-from feynman.visualizer.visualizer3d import Visualizer3D
-from feynman.visualizer.enhanced_visualizer import EnhancedVisualizer
 
 class Interpreter:
     def __init__(self):
@@ -17,15 +14,20 @@ class Interpreter:
         self.simple_parser = SimpleParser()
         self.ast_builder = ASTBuilder()
         self.program = None
+        self._initial_entity_properties = {}
         self.simulation_results = {}
         self.classical_simulator = ClassicalSimulator()
         self.quantum_simulator = QuantumSimulator()
-        self.visualizer = Visualizer()
-        self.visualizer3d = Visualizer3D()
-        self.enhanced_visualizer = EnhancedVisualizer()
     
     def interpret(self, code: str) -> Dict[str, Any]:
-        """Interpret PhysicaLang code and return results"""
+        """Interpret PhysicaLang code, run simulations, and return structured results.
+
+        Returns:
+            Dict[str, Any]: A dictionary containing simulation results structured
+                           for visualization (time_points, entities with initial_properties
+                           and time_series data, simulation_parameters). Returns data
+                           for the first simulation run specified in the code.
+        """
         try:
             # First try our simple parser which is more robust
             self.program = self.simple_parser.parse(code)
@@ -35,36 +37,155 @@ class Interpreter:
             parse_tree = self.lark_parser.parse(code)
             self.program = self.ast_builder.transform(parse_tree)
         
-        # Process and execute simulations
-        for simulate in self.program.simulations:
-            self._run_simulation(simulate.model_name)
-        
-        # Process visualizations
-        vis_results = []
-        vis3d_results = []
-        
-        for visualize in self.program.visualizations:
-            # Create standard 2D visualizations
-            vis_result = self._create_visualization(
-                visualize.entity_name, visualize.target_name
-            )
-            vis_results.append(vis_result)
+        # No longer need to remove this, relying on _collect_initial_properties to clear
+        # self._initial_entity_properties = {} 
+        self.simulation_results = {} # Still need to clear sim results
+
+        # --- Collect Initial Properties First ---
+        self._collect_initial_properties()
+
+        # --- Process and execute simulations ---
+        # Run only the first simulation defined in the .phys file
+        executed_sim_name = None
+        if self.program.simulations:
+            first_simulation = self.program.simulations[0]
+            model_name_to_run = first_simulation.model_name
+            self._run_simulation(model_name_to_run)
+            executed_sim_name = model_name_to_run
+        else:
+            # Return an empty structure if no simulation is run
+            return {
+                "time_points": np.array([]),
+                "entities": {},
+                "simulation_parameters": {},
+                "interactions": [] # Add empty interactions list
+            }
+
+        # --- Structure the results ---
+        if executed_sim_name and executed_sim_name in self.simulation_results:
+            sim_output = self.simulation_results[executed_sim_name]
+            # Retrieve the interactions associated with this specific simulation run
+            # Need to get them from the program based on the model, or store them during _run_simulation
+            # Let's retrieve them from the program object now
+            relevant_interactions = self._get_interactions_for_model(executed_sim_name)
             
-            # Create 3D visualization if applicable
-            vis3d_result = self._create_3d_visualization(
-                visualize.entity_name, visualize.target_name
-            )
-            if vis3d_result:
-                vis3d_results.append(vis3d_result)
-        
-        return {
-            "simulation_results": self.simulation_results,
-            "visualization_results": vis_results,
-            "visualization3d_results": vis3d_results
-        }
+            structured_results = {
+                "time_points": sim_output.get("time_points", np.array([])),
+                "entities": {},
+                "simulation_parameters": sim_output.get("simulation_parameters", {}), # Store params here
+                "interactions": relevant_interactions # Include interactions
+            }
+
+            # Merge initial properties with time-series data
+            # print(f"DEBUG: Merging entities. Simulator output keys: {list(sim_output.get('entities', {}).keys())}") # Remove debug
+            for name, initial_props in self._initial_entity_properties.items():
+                # print(f"DEBUG: Checking entity '{name}'...") # Remove debug
+                # Ensure the entity exists in the simulation output's entities
+                sim_output_entities = sim_output.get("entities", {})
+                if name in sim_output_entities:
+                    # print(f"DEBUG:   Found '{name}' in simulator output. Adding to results.") # Remove debug
+                    structured_results["entities"][name] = {
+                        "initial_properties": initial_props,
+                        "time_series": sim_output_entities[name] # Use the temp variable
+                    }
+                # else:
+                    # print(f"DEBUG:   '{name}' NOT found in simulator output entities.") # Remove debug
+                    # Handle entities defined but not part of the simulation output if necessary
+                    # For now, only include entities that were actually simulated
+            
+            return structured_results
+        else:
+            # Return empty structure if simulation failed or didn't produce results
+            return {
+                "time_points": np.array([]),
+                "entities": {},
+                "simulation_parameters": {},
+                "interactions": [] # Add empty interactions list
+            }
     
-    def _run_simulation(self, model_name: str) -> Dict[str, Any]:
-        """Run a simulation for the given model"""
+    def _collect_initial_properties(self):
+        """Helper method to gather initial properties from the parsed program."""
+        self._initial_entity_properties = {}
+        # print("\nDEBUG (Interpreter): Collecting initial properties...") # Remove debug
+        program_objects = getattr(self.program, 'objects', None)
+        # print(f"DEBUG: Type of self.program.objects: {type(program_objects)}") # Remove debug
+        # print(f"DEBUG: self.program.objects keys: {list(program_objects.keys()) if isinstance(program_objects, dict) else 'N/A'}") # Remove debug
+        
+        # Try iterating and printing here
+        # print("DEBUG: Iterating self.program.objects.items() in _collect_initial_properties:") # Remove debug
+        # try: # Remove debug
+        #     if hasattr(program_objects, 'items'): # Remove debug
+        #          for name, obj in program_objects.items(): # Remove debug
+        #               print(f"  Item: '{name}' -> Type: {type(obj)}") # Remove debug
+        #     else: # Remove debug
+        #          print("  self.program.objects has no 'items' method or is None.") # Remove debug
+        # except Exception as e: # Remove debug
+        #     print(f"  Error iterating: {e}") # Remove debug
+        # print("DEBUG: Finished iterating.") # Remove debug
+
+        # Add objects (classical entities)
+        # Iterate through VALUES (Object instances), not keys!
+        for obj in self.program.objects.values(): 
+            if hasattr(obj, 'name') and hasattr(obj, 'properties'):
+                self._initial_entity_properties[obj.name] = obj.properties
+            elif isinstance(obj, dict) and "name" in obj: # Keep handling dict format just in case
+                self._initial_entity_properties[obj["name"]] = obj.get("properties", {})
+                
+        # Add atoms (quantum entities) - Add structure if needed
+        # Iterate through VALUES here too!
+        for atom in self.program.atoms.values(): 
+            if hasattr(atom, 'name') and hasattr(atom, 'properties'):
+                self._initial_entity_properties[atom.name] = {
+                    "type": "atom", # Explicitly add type if not in properties
+                    **atom.properties
+                }
+            elif isinstance(atom, dict) and "name" in atom:
+                self._initial_entity_properties[atom["name"]] = {
+                    "type": "atom",
+                    **atom.get("properties", {})
+                }
+
+        # Add fields - Add structure if needed
+        # Iterate through VALUES here too!
+        for field in self.program.fields.values(): 
+            if hasattr(field, 'name') and hasattr(field, 'properties'):
+                self._initial_entity_properties[field.name] = {
+                    "type": "field",
+                    **field.properties
+                }
+            elif isinstance(field, dict) and "name" in field:
+                self._initial_entity_properties[field["name"]] = {
+                    "type": "field",
+                    **field.get("properties", {})
+                }
+
+    def _get_interactions_for_model(self, model_name: str) -> List[Dict[str, Any]]:
+        """Helper method to extract interaction definitions relevant to the model.
+           Assumes interactions in self.program apply globally for now.
+           A more complex system might associate interactions with models.
+        """
+        # Currently, the AST/program structure seems to list interactions globally.
+        # We return all defined interactions.
+        # If interactions were model-specific, logic would be needed here.
+        interactions_list = []
+        for interaction in self.program.interactions:
+            # Handle different interaction representations from parsers
+            if isinstance(interaction, dict):
+                # Already in the expected dict format
+                interactions_list.append(interaction)
+            elif hasattr(interaction, 'source') and hasattr(interaction, 'target'):
+                # Convert AST node object to dict
+                interactions_list.append({
+                    "source": interaction.source,
+                    "target": interaction.target,
+                    "properties": getattr(interaction, 'properties', {})
+                })
+            # Add handling for other potential formats if necessary
+            
+        return interactions_list
+
+    def _run_simulation(self, model_name: str):
+        """Run a simulation for the given model and store results in self.simulation_results"""
         # Find the model
         model = None
         if isinstance(self.program.models, dict):
@@ -96,94 +217,56 @@ class Interpreter:
         time_start, time_end = model.get_time_range() if hasattr(model, 'get_time_range') else (0.0, 1.0)
         time_step = model.get_resolution() if hasattr(model, 'get_resolution') else 0.01
         
-        # Collect entities for this model
-        entities = {}
+        # --- Use pre-collected initial properties ---
+        # Create the 'entities' dictionary needed by the simulator
+        entities_for_simulator = {}
+        # print(f"DEBUG (Interpreter): Initial entities_for_simulator (id: {id(entities_for_simulator)}): {list(entities_for_simulator.keys())}") # Remove debug
+        for i, (name, props) in enumerate(self._initial_entity_properties.items()): 
+            # print(f"DEBUG (Interpreter): Loop {i}, adding '{name}'") # Remove debug
+            # Determine entity type (object, atom, field) based on stored props or defaults
+            entity_type = "object" # Default assumption, adjust if props contain type info
+            if 'type' in props:
+                entity_type = props['type']
+            # Or infer based on which list it came from (objects, atoms, fields) if needed
+            # For now, assume props might contain a 'type' hint or default to 'object'
+
+            value_to_assign = {
+                "type": entity_type, # Pass type to simulator
+                "properties": props # Pass all initial properties
+            }
+            entities_for_simulator[name] = value_to_assign
+            # print(f"DEBUG (Interpreter):   After adding '{name}', keys: {list(entities_for_simulator.keys())}") # Remove debug
+
+        # print(f"DEBUG (Interpreter): Final entities_for_simulator (id: {id(entities_for_simulator)}): {list(entities_for_simulator.keys())}") # Remove debug
         
-        # Add objects (classical entities)
-        for obj in self.program.objects:
-            # Handle different object representations
-            if isinstance(obj, str):
-                # If the object is a string, use it directly with default properties
-                entities[obj] = {
-                    "type": "object",
-                    "properties": {}
-                }
-            elif hasattr(obj, 'name') and hasattr(obj, 'properties'):
-                entities[obj.name] = {
-                    "type": "object",
-                    "properties": obj.properties
-                }
-            elif isinstance(obj, dict) and "name" in obj:
-                entities[obj["name"]] = {
-                    "type": "object",
-                    "properties": obj.get("properties", {})
-                }
-        
-        # Add atoms (quantum entities)
-        for atom in self.program.atoms:
-            # Handle different atom representations
-            if isinstance(atom, str):
-                # If the atom is a string, use it directly with default properties
-                entities[atom] = {
-                    "type": "atom",
-                    "properties": {}
-                }
-            elif hasattr(atom, 'name') and hasattr(atom, 'properties'):
-                entities[atom.name] = {
-                    "type": "atom",
-                    "properties": atom.properties
-                }
-            elif isinstance(atom, dict) and "name" in atom:
-                entities[atom["name"]] = {
-                    "type": "atom",
-                    "properties": atom.get("properties", {})
-                }
-        
-        # Add fields
-        for field in self.program.fields:
-            # Handle different field representations
-            if isinstance(field, str):
-                # If the field is a string, use it directly with default properties
-                entities[field] = {
-                    "type": "field",
-                    "properties": {}
-                }
-            elif hasattr(field, 'name') and hasattr(field, 'properties'):
-                entities[field.name] = {
-                    "type": "field",
-                    "properties": field.properties
-                }
-            elif isinstance(field, dict) and "name" in field:
-                entities[field["name"]] = {
-                    "type": "field",
-                    "properties": field.get("properties", {})
-                }
-        
-        interactions = []
-        for interaction in self.program.interactions:
-            # Handle different interaction representations
-            if isinstance(interaction, dict):
-                interactions.append(interaction)
-            elif hasattr(interaction, 'source') and hasattr(interaction, 'target'):
-                interactions.append({
-                    "source": interaction.source,
-                    "target": interaction.target,
-                    "properties": getattr(interaction, 'properties', {})
-                })
-        
+        # --- Prepare interactions for the simulator --- 
+        # Use the helper function to get interactions in the right format
+        # Note: _get_interactions_for_model currently gets ALL interactions.
+        # The simulator itself filters based on entities present in the simulation state.
+        interactions_for_simulator = self._get_interactions_for_model(model_name)
+
+        # --- DEBUG PRINT: Entities being passed to simulator ---
+        # print(f"\nDEBUG (Interpreter): Passing entities to simulator (id: {id(entities_for_simulator)}):") # Remove this older print
+        # for name, data in entities_for_simulator.items():
+        #      print(f"  '{name}': type='{data.get('type')}', props_keys={list(data.get('properties',{}).keys())}")
+        # --- END DEBUG PRINT ---
+
         # Choose simulator based on model type
         if model_type == "classical":
+            # --- Pass a copy to isolate from potential side effects ---
+            entities_copy = entities_for_simulator.copy()
+            # print(f"DEBUG (Interpreter): Passing COPY of entities (orig id: {id(entities_for_simulator)}, copy id: {id(entities_copy)}) with keys: {list(entities_copy.keys())}") # Remove debug
             result = self.classical_simulator.simulate(
-                entities=entities,
-                interactions=interactions,
+                entities=entities_copy, # Pass the copy
+                interactions=interactions_for_simulator,
                 time_start=time_start,
                 time_end=time_end,
                 time_step=time_step
             )
         elif model_type == "quantum":
             result = self.quantum_simulator.simulate(
-                entities=entities,
-                interactions=interactions,
+                entities=entities_for_simulator,
+                interactions=interactions_for_simulator, # Pass the prepared list
                 time_start=time_start,
                 time_end=time_end,
                 time_step=time_step
@@ -191,157 +274,12 @@ class Interpreter:
         else:
             raise ValueError(f"Unknown model type: {model_type}")
         
+        # Store results along with simulation parameters
+        result["simulation_parameters"] = {
+            "time_start": time_start,
+            "time_end": time_end,
+            "time_step": time_step,
+            "model_type": model_type
+        }
         self.simulation_results[model_name] = result
-        return result
-    
-    def _create_visualization(self, entity_name: str, target_name: Optional[str] = None) -> Dict[str, Any]:
-        """Create a visualization for the given entity"""
-        # Find which simulation contains this entity
-        sim_data = None
-        for model_name, sim_result in self.simulation_results.items():
-            if entity_name in sim_result["entities"]:
-                sim_data = sim_result
-                break
-        
-        if not sim_data:
-            # Entity not found in simulation results - return empty result with warning message
-            return {entity_name: {"error": f"Entity '{entity_name}' not found in simulation results"}}
-        
-        # Get entity data
-        entity_data = sim_data["entities"][entity_name]
-        
-        # Get target data if specified
-        target_data = None
-        if target_name and target_name in sim_data["entities"]:
-            target_data = sim_data["entities"][target_name]
-        
-        # Create visualization
-        vis_result = self.visualizer.visualize(
-            entity_name=entity_name,
-            entity_data=entity_data,
-            time_points=sim_data["time_points"],
-            target_name=target_name,
-            target_data=target_data
-        )
-        
-        return {entity_name: vis_result}
-    
-    def _create_3d_visualization(self, entity_name: str, target_name: Optional[str] = None) -> Dict[str, Any]:
-        """Create a 3D visualization for the given entity"""
-        # Find which simulation contains this entity
-        sim_data = None
-        for model_name, sim_result in self.simulation_results.items():
-            if "entities" in sim_result and entity_name in sim_result["entities"]:
-                sim_data = sim_result
-                break
-        
-        if not sim_data:
-            # Entity not found in simulation results - return empty result with warning message
-            return {entity_name: {"error": f"Entity '{entity_name}' not found in 3D visualization"}}
-        
-        # Get entity data 
-        entities = sim_data["entities"]
-        time_points = sim_data["time_points"]
-        
-        # Additional entity check
-        if entity_name not in entities:
-            return {entity_name: {"error": f"Entity '{entity_name}' not found in entities"}}
-        
-        entity_data = entities[entity_name]
-        
-        try:
-            # Create static 3D visualization at final time step
-            final_frame = self.visualizer3d.visualize_scene(
-                entities=entities,
-                time_points=time_points,
-                time_index=-1  # Final time step
-            )
-            
-            # Create animation if we have trajectory data
-            has_trajectory = False
-            if entity_data.get("type") == "object" and len(entity_data.get("positions", [])) > 1:
-                has_trajectory = True
-            elif entity_data.get("type") == "atom" and len(entity_data.get("expected_position", [])) > 1:
-                has_trajectory = True
-            
-            animation_data = None
-            if has_trajectory:
-                animation_data = self.visualizer3d.create_animation(
-                    entities=entities,
-                    time_points=time_points,
-                    num_frames=30
-                )
-            
-            vis_result = {
-                "scene_3d": final_frame["scene_3d"],
-                "time": final_frame["time"]
-            }
-            
-            if animation_data:
-                vis_result["animation_3d"] = animation_data
-                vis_result["animation_type"] = "gif"
-            
-            return {entity_name: vis_result}
-        except Exception as e:
-            # Return error message if visualization fails
-            import traceback
-            error_info = traceback.format_exc()
-            print(f"Error in 3D visualization: {error_info}")
-            return {entity_name: {"error": f"Error creating 3D visualization: {str(e)}"}}
-        
-        return None 
-
-    def _create_3d_visualization(self, ast, sim_result, entity_name):
-        """Create a 3D visualization from simulation results."""
-        if sim_result is None:
-            return {"error": f"No simulation results available for visualization"}
-
-        # Get the entity from the simulation result
-        entities = sim_result.get("entities", {})
-        if entity_name and entity_name not in entities:
-            return {"error": f"Entity '{entity_name}' not found in simulation results"}
-
-        # Get interactions
-        interactions = []
-        for interaction in ast.interactions:
-            interactions.append({
-                "source": interaction.source,
-                "target": interaction.target,
-                "properties": interaction.get_properties()
-            })
-
-        # Create visualization using the advanced 3D visualizer
-        all_entities = {}
-        time_points = sim_result.get("time_points", [])
-        
-        for name, entity_data in entities.items():
-            all_entities[name] = entity_data
-        
-        use_enhanced = ast.get_property("enhanced_visuals", "false").lower() == "true"
-        
-        if use_enhanced:
-            # Use the enhanced visualizer with interactive features
-            html = self.enhanced_visualizer.create_visualization(all_entities, time_points, interactions, entity_name)
-        else:
-            # Use the standard 3D visualizer
-            html = self.visualizer3d.visualize_scene(all_entities, entity_name, interactions=interactions)
-            
-            # If animation is desired, create it
-            if ast.get_property("animate", "false").lower() == "true":
-                animation_html = self.visualizer3d.create_animation(all_entities, entity_name, interactions=interactions)
-                # Combine the static and animated visualizations
-                html = f"""
-                <h2>3D Visualization</h2>
-                <div style="display: flex; justify-content: center;">
-                    <div style="margin-right: 20px;">
-                        <h3>Static View</h3>
-                        {html}
-                    </div>
-                    <div>
-                        <h3>Animation</h3>
-                        {animation_html}
-                    </div>
-                </div>
-                """
-
-        return {"html": html} 
+        # No return needed, results stored in self.simulation_results 

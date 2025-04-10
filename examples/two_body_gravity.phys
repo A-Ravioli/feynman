@@ -10,8 +10,8 @@ object sun:
 
 object earth:
     mass: 5.972e24
-    position: [1.496e11, 0, 0]  # 1 AU distance
-    velocity: [0, 29780, 0]     # Initial orbital velocity (m/s)
+    position: [1.496e11, 0, 0]
+    velocity: [0, 29780, 0]
 
 interaction sun -> earth:
     force: gravity(G=6.67430e-11)
