@@ -22,6 +22,9 @@ def _load_results_with_numpy(file_path: str) -> Dict[str, Any]:
     def convert_to_numpy(item):
         if isinstance(item, dict):
             # Handle complex number dicts saved by old _make_json_serializable
+            if 'interactions' in item:
+                # Process other keys recursively, leave 'interactions' as is (will be list)
+                return {k: (convert_to_numpy(v) if k != 'interactions' else v) for k, v in item.items()}
             if 'real' in item and 'imag' in item and len(item) == 2:
                  real_part = np.array(item['real'])
                  imag_part = np.array(item['imag'])
@@ -42,7 +45,14 @@ def _load_results_with_numpy(file_path: str) -> Dict[str, Any]:
                  return [convert_to_numpy(sub_item) for sub_item in item]
         return item
         
-    return convert_to_numpy(data)
+    # Ensure the top-level 'interactions' is handled correctly if data is a dict
+    if isinstance(data, dict) and 'interactions' in data:
+        interactions_list = data['interactions'] # Keep the original list
+        converted_data = {k: convert_to_numpy(v) for k, v in data.items() if k != 'interactions'}
+        converted_data['interactions'] = interactions_list # Put the original list back
+        return converted_data
+    else:
+        return convert_to_numpy(data) # Process normally if 'interactions' isn't top-level
 
 class PhysicaLangCLI:
     """Command-line interface for PhysicaLang"""

@@ -22,12 +22,8 @@ class BaseVisualizer:
         self.entity_names = list(self.entities.keys())
         self.num_steps = len(self.time_points)
         # Store interactions if present (optional)
-        self.interactions = sim_data.get("interactions", [])
+        self.interactions = sim_data.get("interactions", {})
         self.simulation_parameters = sim_data.get("simulation_parameters", {})
-        
-        # Default layout components (can be overridden or extended)
-        self.app.layout = self._create_layout()
-        self._register_callbacks()
 
     def _validate_data(self, data):
         """Basic validation of the input simulation data structure."""
@@ -42,8 +38,8 @@ class BaseVisualizer:
             return False
         # Interactions key is optional, but if present, should be a list
         if "interactions" in data and not isinstance(data["interactions"], list):
-             print("Validation Error: Invalid 'interactions' (must be a list).")
-             return False
+            print(f"Validation Error: Invalid 'interactions' (type: {type(data.get('interactions'))}, expected list).")
+            return False
         for name, entity_data in data["entities"].items():
             if not isinstance(entity_data, dict) or \
                "initial_properties" not in entity_data or \
