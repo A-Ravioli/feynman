@@ -10,7 +10,6 @@ from .parser.parser import PhysicaParser
 from .interpreter.ast_builder import ASTBuilder
 from .simulator.classical_simulator import ClassicalSimulator
 from .simulator.quantum_simulator import QuantumSimulator
-from .visualizer.visualizer import Visualizer
 
 # Public API
 __all__ = [
@@ -21,7 +20,6 @@ __all__ = [
     'PhysicaParser',
     'ClassicalSimulator',
     'QuantumSimulator',
-    'Visualizer'
 ]
 
 def run_simulation(code, visualize=False):
@@ -34,17 +32,17 @@ def run_simulation(code, visualize=False):
                           (Note: This will block until the visualizer is closed).
 
     Returns:
-        dict: Dictionary containing simulation results.
+        dict: Dictionary containing structured simulation results.
     """
     interpreter = Interpreter()
-    results = interpreter.interpret(code)
+    structured_results = interpreter.interpret(code)
 
     if visualize:
-        launch_visualizer(results)
+        launch_visualizer(structured_results)
         # Note: If visualize is True, the function will block here until
         # the Dash server is stopped. Consider running in a thread if needed.
 
-    return results # Return results regardless of visualization
+    return structured_results # Return the structured results
 
 def parse_code(code):
     """
@@ -64,24 +62,41 @@ def parse_code(code):
 
 def launch_visualizer(results):
     """
-    Launch the interactive Dash visualizer with the given simulation results.
+    Launch the interactive Dash visualizer with the given structured simulation results.
 
     Args:
-        results (dict): Simulation results dictionary (e.g., from run_simulation()).
-                        This function assumes results contain data in the expected format
-                        (including NumPy arrays if applicable, not just lists from JSON).
+        results (dict): Structured simulation results dictionary (from run_simulation()).
+                        Expected format:
+                        {
+                            "time_points": np.array([...]),
+                            "entities": {
+                                "entity_name": {
+                                    "initial_properties": {...},
+                                    "time_series": {...}
+                                }, ...
+                            },
+                            "simulation_parameters": {...}
+                        }
     """
-    # No need to check for simulation_results key here, Visualizer handles data prep
-    if not isinstance(results, dict) or not results.get('entities'):
-         print("Warning: Invalid or empty results provided to visualizer. Nothing to display.")
+    if not isinstance(results, dict) or \
+       "time_points" not in results or \
+       "entities" not in results or \
+       not isinstance(results["entities"], dict):
+         print("Warning: Invalid or improperly structured results provided to visualizer. Nothing to display.")
          return
          
-    print("Launching interactive visualizer...")
+    if not results["entities"]:
+        print("Warning: Simulation results contain no entities to visualize.")
+        return
+
+    print("Launching interactive visualizer... (Placeholder - Visualizer class not yet implemented)")
     try:
-        visualizer = Visualizer(results) # Instantiates the Dash app
-        # The run_server method blocks until the server is stopped
-        visualizer.run_server(debug=False) # Set debug=True for development
-        print("Visualizer closed.")
+        print("--- Visualizer Placeholder ---")
+        print(f"  Time points: {len(results.get('time_points', []))}")
+        print(f"  Entities: {list(results.get('entities', {}).keys())}")
+        print(f"  Sim Params: {results.get('simulation_parameters', {})}")
+        print("--- Visualization would run here (blocking) ---")
+        print("Visualizer closed. (Placeholder)")
     except Exception as e:
          print(f"Error launching visualizer: {e}")
          import traceback
