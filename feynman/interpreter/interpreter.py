@@ -37,13 +37,11 @@ class Interpreter:
             parse_tree = self.lark_parser.parse(code)
             self.program = self.ast_builder.transform(parse_tree)
         
-        # Clear previous state
-        self._initial_entity_properties = {}
-        self.simulation_results = {}
+        # No longer need to remove this, relying on _collect_initial_properties to clear
+        # self._initial_entity_properties = {} 
+        self.simulation_results = {} # Still need to clear sim results
 
         # --- Collect Initial Properties First ---
-        # We need the initial properties *before* running the simulation
-        # The _run_simulation method will be adapted to use this stored data
         self._collect_initial_properties()
 
         # --- Process and execute simulations ---
@@ -59,30 +57,41 @@ class Interpreter:
             return {
                 "time_points": np.array([]),
                 "entities": {},
-                "simulation_parameters": {}
+                "simulation_parameters": {},
+                "interactions": [] # Add empty interactions list
             }
 
         # --- Structure the results ---
         if executed_sim_name and executed_sim_name in self.simulation_results:
             sim_output = self.simulation_results[executed_sim_name]
+            # Retrieve the interactions associated with this specific simulation run
+            # Need to get them from the program based on the model, or store them during _run_simulation
+            # Let's retrieve them from the program object now
+            relevant_interactions = self._get_interactions_for_model(executed_sim_name)
+            
             structured_results = {
                 "time_points": sim_output.get("time_points", np.array([])),
                 "entities": {},
-                "simulation_parameters": sim_output.get("simulation_parameters", {}) # Store params here
+                "simulation_parameters": sim_output.get("simulation_parameters", {}), # Store params here
+                "interactions": relevant_interactions # Include interactions
             }
 
             # Merge initial properties with time-series data
+            # print(f"DEBUG: Merging entities. Simulator output keys: {list(sim_output.get('entities', {}).keys())}") # Remove debug
             for name, initial_props in self._initial_entity_properties.items():
+                # print(f"DEBUG: Checking entity '{name}'...") # Remove debug
                 # Ensure the entity exists in the simulation output's entities
-                if name in sim_output.get("entities", {}):
+                sim_output_entities = sim_output.get("entities", {})
+                if name in sim_output_entities:
+                    # print(f"DEBUG:   Found '{name}' in simulator output. Adding to results.") # Remove debug
                     structured_results["entities"][name] = {
                         "initial_properties": initial_props,
-                        "time_series": sim_output["entities"][name] # This now contains pos, vel, energy etc.
+                        "time_series": sim_output_entities[name] # Use the temp variable
                     }
-                else:
+                # else:
+                    # print(f"DEBUG:   '{name}' NOT found in simulator output entities.") # Remove debug
                     # Handle entities defined but not part of the simulation output if necessary
                     # For now, only include entities that were actually simulated
-                    pass
             
             return structured_results
         else:
@@ -90,21 +99,41 @@ class Interpreter:
             return {
                 "time_points": np.array([]),
                 "entities": {},
-                "simulation_parameters": {}
+                "simulation_parameters": {},
+                "interactions": [] # Add empty interactions list
             }
     
     def _collect_initial_properties(self):
         """Helper method to gather initial properties from the parsed program."""
         self._initial_entity_properties = {}
+        # print("\nDEBUG (Interpreter): Collecting initial properties...") # Remove debug
+        program_objects = getattr(self.program, 'objects', None)
+        # print(f"DEBUG: Type of self.program.objects: {type(program_objects)}") # Remove debug
+        # print(f"DEBUG: self.program.objects keys: {list(program_objects.keys()) if isinstance(program_objects, dict) else 'N/A'}") # Remove debug
+        
+        # Try iterating and printing here
+        # print("DEBUG: Iterating self.program.objects.items() in _collect_initial_properties:") # Remove debug
+        # try: # Remove debug
+        #     if hasattr(program_objects, 'items'): # Remove debug
+        #          for name, obj in program_objects.items(): # Remove debug
+        #               print(f"  Item: '{name}' -> Type: {type(obj)}") # Remove debug
+        #     else: # Remove debug
+        #          print("  self.program.objects has no 'items' method or is None.") # Remove debug
+        # except Exception as e: # Remove debug
+        #     print(f"  Error iterating: {e}") # Remove debug
+        # print("DEBUG: Finished iterating.") # Remove debug
+
         # Add objects (classical entities)
-        for obj in self.program.objects:
+        # Iterate through VALUES (Object instances), not keys!
+        for obj in self.program.objects.values(): 
             if hasattr(obj, 'name') and hasattr(obj, 'properties'):
                 self._initial_entity_properties[obj.name] = obj.properties
-            elif isinstance(obj, dict) and "name" in obj: # Handle simple parser dict format
+            elif isinstance(obj, dict) and "name" in obj: # Keep handling dict format just in case
                 self._initial_entity_properties[obj["name"]] = obj.get("properties", {})
                 
         # Add atoms (quantum entities) - Add structure if needed
-        for atom in self.program.atoms:
+        # Iterate through VALUES here too!
+        for atom in self.program.atoms.values(): 
             if hasattr(atom, 'name') and hasattr(atom, 'properties'):
                 self._initial_entity_properties[atom.name] = {
                     "type": "atom", # Explicitly add type if not in properties
@@ -117,7 +146,8 @@ class Interpreter:
                 }
 
         # Add fields - Add structure if needed
-        for field in self.program.fields:
+        # Iterate through VALUES here too!
+        for field in self.program.fields.values(): 
             if hasattr(field, 'name') and hasattr(field, 'properties'):
                 self._initial_entity_properties[field.name] = {
                     "type": "field",
@@ -128,6 +158,31 @@ class Interpreter:
                     "type": "field",
                     **field.get("properties", {})
                 }
+
+    def _get_interactions_for_model(self, model_name: str) -> List[Dict[str, Any]]:
+        """Helper method to extract interaction definitions relevant to the model.
+           Assumes interactions in self.program apply globally for now.
+           A more complex system might associate interactions with models.
+        """
+        # Currently, the AST/program structure seems to list interactions globally.
+        # We return all defined interactions.
+        # If interactions were model-specific, logic would be needed here.
+        interactions_list = []
+        for interaction in self.program.interactions:
+            # Handle different interaction representations from parsers
+            if isinstance(interaction, dict):
+                # Already in the expected dict format
+                interactions_list.append(interaction)
+            elif hasattr(interaction, 'source') and hasattr(interaction, 'target'):
+                # Convert AST node object to dict
+                interactions_list.append({
+                    "source": interaction.source,
+                    "target": interaction.target,
+                    "properties": getattr(interaction, 'properties', {})
+                })
+            # Add handling for other potential formats if necessary
+            
+        return interactions_list
 
     def _run_simulation(self, model_name: str):
         """Run a simulation for the given model and store results in self.simulation_results"""
@@ -165,7 +220,9 @@ class Interpreter:
         # --- Use pre-collected initial properties ---
         # Create the 'entities' dictionary needed by the simulator
         entities_for_simulator = {}
-        for name, props in self._initial_entity_properties.items():
+        # print(f"DEBUG (Interpreter): Initial entities_for_simulator (id: {id(entities_for_simulator)}): {list(entities_for_simulator.keys())}") # Remove debug
+        for i, (name, props) in enumerate(self._initial_entity_properties.items()): 
+            # print(f"DEBUG (Interpreter): Loop {i}, adding '{name}'") # Remove debug
             # Determine entity type (object, atom, field) based on stored props or defaults
             entity_type = "object" # Default assumption, adjust if props contain type info
             if 'type' in props:
@@ -173,28 +230,35 @@ class Interpreter:
             # Or infer based on which list it came from (objects, atoms, fields) if needed
             # For now, assume props might contain a 'type' hint or default to 'object'
 
-            entities_for_simulator[name] = {
+            value_to_assign = {
                 "type": entity_type, # Pass type to simulator
                 "properties": props # Pass all initial properties
             }
+            entities_for_simulator[name] = value_to_assign
+            # print(f"DEBUG (Interpreter):   After adding '{name}', keys: {list(entities_for_simulator.keys())}") # Remove debug
+
+        # print(f"DEBUG (Interpreter): Final entities_for_simulator (id: {id(entities_for_simulator)}): {list(entities_for_simulator.keys())}") # Remove debug
         
-        interactions = []
-        for interaction in self.program.interactions:
-            # Handle different interaction representations
-            if isinstance(interaction, dict):
-                interactions.append(interaction)
-            elif hasattr(interaction, 'source') and hasattr(interaction, 'target'):
-                interactions.append({
-                    "source": interaction.source,
-                    "target": interaction.target,
-                    "properties": getattr(interaction, 'properties', {})
-                })
-        
+        # --- Prepare interactions for the simulator --- 
+        # Use the helper function to get interactions in the right format
+        # Note: _get_interactions_for_model currently gets ALL interactions.
+        # The simulator itself filters based on entities present in the simulation state.
+        interactions_for_simulator = self._get_interactions_for_model(model_name)
+
+        # --- DEBUG PRINT: Entities being passed to simulator ---
+        # print(f"\nDEBUG (Interpreter): Passing entities to simulator (id: {id(entities_for_simulator)}):") # Remove this older print
+        # for name, data in entities_for_simulator.items():
+        #      print(f"  '{name}': type='{data.get('type')}', props_keys={list(data.get('properties',{}).keys())}")
+        # --- END DEBUG PRINT ---
+
         # Choose simulator based on model type
         if model_type == "classical":
+            # --- Pass a copy to isolate from potential side effects ---
+            entities_copy = entities_for_simulator.copy()
+            # print(f"DEBUG (Interpreter): Passing COPY of entities (orig id: {id(entities_for_simulator)}, copy id: {id(entities_copy)}) with keys: {list(entities_copy.keys())}") # Remove debug
             result = self.classical_simulator.simulate(
-                entities=entities_for_simulator,
-                interactions=interactions,
+                entities=entities_copy, # Pass the copy
+                interactions=interactions_for_simulator,
                 time_start=time_start,
                 time_end=time_end,
                 time_step=time_step
@@ -202,7 +266,7 @@ class Interpreter:
         elif model_type == "quantum":
             result = self.quantum_simulator.simulate(
                 entities=entities_for_simulator,
-                interactions=interactions,
+                interactions=interactions_for_simulator, # Pass the prepared list
                 time_start=time_start,
                 time_end=time_end,
                 time_step=time_step

@@ -7,7 +7,8 @@ import numpy as np
 from typing import Dict, Any
 
 from .interpreter.interpreter import Interpreter
-from .visualizer.visualizer import Visualizer
+# Import the new main visualizer
+from .visualizer.main_visualizer import FeynmanVisualizer
 
 # Helper function to convert loaded JSON lists back to numpy arrays if needed
 # This might be necessary if the simulator saves arrays directly
@@ -101,6 +102,16 @@ class PhysicaLangCLI:
             # Run the interpreter
             results = self.interpreter.interpret(code)
             
+            # --- DEBUG PRINT: Results from Interpreter ---
+            # print("\nDEBUG: Results directly from interpreter:") # Remove debug
+            # Basic structure print to avoid huge output
+            # print(f"  Keys: {list(results.keys())}") # Remove debug
+            # if 'time_points' in results: print(f"  Time Points Length: {len(results['time_points'])}") # Remove debug
+            # if 'entities' in results: print(f"  Entities: {list(results['entities'].keys())}") # Remove debug
+            # if 'interactions' in results: print(f"  Interactions Count: {len(results['interactions'])}") # Remove debug
+            # print(results) # Uncomment for full data if needed
+            # --- END DEBUG PRINT ---
+            
             # Save results
             print(f"Saving simulation results to {output_file}...")
             # Ensure parent directory exists
@@ -116,6 +127,22 @@ class PhysicaLangCLI:
             if visualize:
                 # Load results back (potentially converting arrays)
                 loaded_results = _load_results_with_numpy(output_file)
+                
+                # --- DEBUG PRINT: Results after loading from JSON ---
+                # print("\nDEBUG: Results after loading from JSON:") # Remove debug
+                # print(f"  Keys: {list(loaded_results.keys())}") # Remove debug
+                # if 'time_points' in loaded_results: print(f"  Time Points Type: {type(loaded_results['time_points'])}") # Remove debug
+                # if 'entities' in loaded_results: print(f"  Entities: {list(loaded_results['entities'].keys())}") # Remove debug
+                # Check type of a position array to see if numpy conversion worked
+                # if 'entities' in loaded_results and loaded_results['entities']: # Remove debug
+                #      first_entity_name = list(loaded_results['entities'].keys())[0] # Remove debug
+                #      first_entity = loaded_results['entities'][first_entity_name] # Remove debug
+                #      if 'time_series' in first_entity and 'positions' in first_entity['time_series']: # Remove debug
+                #           pos_type = type(first_entity['time_series']['positions']) # Remove debug
+                #           print(f"  Position Array Type (first entity): {pos_type}") # Remove debug
+                # print(loaded_results) # Uncomment for full data if needed
+                # --- END DEBUG PRINT ---
+                
                 self.launch_visualizer(loaded_results)
             
         except Exception as e:
@@ -144,12 +171,21 @@ class PhysicaLangCLI:
             sys.exit(1)
     
     def launch_visualizer(self, results: Dict[str, Any]):
-        """Instantiates and runs the new Dash visualizer."""
+        """Instantiates and runs the new main Dash visualizer."""
         print("Launching interactive visualizer...")
-        visualizer = Visualizer(results) # Instantiates the Dash app
-        # The run_server method now blocks until the server is stopped
-        visualizer.run_server(debug=False) # Set debug=True for development
-        print("Visualizer closed.")
+        try:
+            # Ensure results are properly structured (e.g., with NumPy arrays)
+            # _load_results_with_numpy should handle this if called before
+            visualizer = FeynmanVisualizer(results) # Instantiate the main visualizer
+            # Call the method (which now internally calls app.run)
+            visualizer.run_server(debug=False) # Set debug=True for development
+            print("Visualizer closed.")
+        except Exception as e:
+             print(f"Error launching visualizer from CLI: {e}")
+             import traceback
+             traceback.print_exc()
+             # Optionally exit, or let the CLI continue
+             # sys.exit(1)
     
     def _make_json_serializable(self, obj):
         """Convert NumPy arrays to lists for JSON serialization"""

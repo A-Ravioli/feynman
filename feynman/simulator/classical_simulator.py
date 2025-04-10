@@ -25,16 +25,37 @@ class ClassicalSimulator:
     def simulate(self, entities: Dict[str, Any], interactions: List[Dict[str, Any]], 
                  time_start: float, time_end: float, time_step: float) -> Dict[str, Any]:
         """Run a classical physics simulation"""
-        self.entities = entities
+        # --- Delay assignment to self.entities ---
+        # self.entities = entities 
+        # --- 
         self.interactions = interactions
         
+        # --- DEBUG PRINT: Entities received by simulator ---
+        print(f"\nDEBUG (Simulator): Received entities (id: {id(entities)}, Keys: {list(entities.keys())})") # Add id()
+        # Add a simple loop to check items()
+        print("DEBUG (Simulator): Iterating through entities.items() before filter:")
+        for name, props_item in entities.items():
+             print(f"  Item: '{name}' -> Type='{props_item.get('type')}'")
+        print("DEBUG (Simulator): Finished iterating. Starting filter...")
+        # --- END DEBUG PRINT ---
+        
         # Filter to get just the classical objects
+        # USE THE LOCAL 'entities' variable for filtering, NOT self.entities
         classical_objects = {
             name: props for name, props in entities.items()
-            if props["type"] == "object"
+            if (print(f"DEBUG (Filtering): Checking '{name}', props['type']='{props.get('type', 'N/A')}', type={type(props.get('type'))}, check result={props.get('type') == 'object'}") is None) and (props.get("type") == "object")
         }
         
+        # --- Assign to self.entities AFTER filtering and initial use ---
+        self.entities = entities
+        # ---
+        
+        # --- DEBUG PRINT: Filtered classical objects ---
+        print(f"\nDEBUG (Simulator): Filtered classical_objects keys: {list(classical_objects.keys())}")
+        # --- END DEBUG PRINT ---
+        
         if not classical_objects:
+            print("DEBUG (Simulator): No classical objects found after filtering, returning empty entities.") # Add log here
             return {
                 "time_points": np.arange(time_start, time_end + time_step, time_step),
                 "entities": {}

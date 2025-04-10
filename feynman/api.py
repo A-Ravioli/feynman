@@ -10,6 +10,10 @@ from .parser.parser import PhysicaParser
 from .interpreter.ast_builder import ASTBuilder
 from .simulator.classical_simulator import ClassicalSimulator
 from .simulator.quantum_simulator import QuantumSimulator
+# Remove old visualizer import
+# from .visualizer.visualizer_2d import Visualizer2D 
+# Import the main visualizer
+from .visualizer.main_visualizer import FeynmanVisualizer
 
 # Public API
 __all__ = [
@@ -20,6 +24,8 @@ __all__ = [
     'PhysicaParser',
     'ClassicalSimulator',
     'QuantumSimulator',
+    # 'Visualizer2D' # Remove specific visualizer
+    'FeynmanVisualizer' # Add main visualizer
 ]
 
 def run_simulation(code, visualize=False):
@@ -62,8 +68,8 @@ def parse_code(code):
 
 def launch_visualizer(results):
     """
-    Launch the interactive Dash visualizer with the given structured simulation results.
-
+    Launch the main interactive Dash visualizer with tabs for different plots.
+    
     Args:
         results (dict): Structured simulation results dictionary (from run_simulation()).
                         Expected format:
@@ -89,14 +95,22 @@ def launch_visualizer(results):
         print("Warning: Simulation results contain no entities to visualize.")
         return
 
-    print("Launching interactive visualizer... (Placeholder - Visualizer class not yet implemented)")
+    print("Launching main interactive visualizer...")
+    # print(f"Data to visualize: {results}") # Optional: Print data for debugging
     try:
-        print("--- Visualizer Placeholder ---")
-        print(f"  Time points: {len(results.get('time_points', []))}")
-        print(f"  Entities: {list(results.get('entities', {}).keys())}")
-        print(f"  Sim Params: {results.get('simulation_parameters', {})}")
-        print("--- Visualization would run here (blocking) ---")
-        print("Visualizer closed. (Placeholder)")
+        # Instantiate and run the main FeynmanVisualizer
+        visualizer = FeynmanVisualizer(results) # Instantiates the Dash app with tabs
+        # The run_server method blocks until the server is stopped
+        visualizer.run_server(debug=False) # Set debug=True for development
+        
+        # Remove placeholder prints
+        # print("--- Visualizer Placeholder ---")
+        # print(f"  Time points: {len(results.get('time_points', []))}")
+        # print(f"  Entities: {list(results.get('entities', {}).keys())}")
+        # print(f"  Sim Params: {results.get('simulation_parameters', {})}")
+        # print("--- Visualization would run here (blocking) ---")
+        
+        print("Visualizer closed.")
     except Exception as e:
          print(f"Error launching visualizer: {e}")
          import traceback
