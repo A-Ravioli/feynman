@@ -217,6 +217,34 @@ class Interpreter:
         time_start, time_end = model.get_time_range() if hasattr(model, 'get_time_range') else (0.0, 1.0)
         time_step = model.get_resolution() if hasattr(model, 'get_resolution') else 0.01
         
+        # --- Extract Quantum Simulation Parameters from Model --- 
+        simulation_params = {}
+        if model_type == "quantum":
+             model_props = model.properties if hasattr(model, 'properties') else model.get("properties", {})
+             # Domain settings (required)
+             # Assume they are directly in model properties or under a 'domain' key
+             domain_settings = model_props.get('domain_settings', model_props.get('domain')) 
+             if domain_settings:
+                  simulation_params['domain_settings'] = domain_settings
+             else: # Try to construct from top-level properties if missing
+                 dims = model_props.get('dimensions')
+                 points = model_props.get('points')
+                 ranges = model_props.get('ranges')
+                 if dims and points and ranges:
+                      simulation_params['domain_settings'] = {'dimensions': dims, 'points': points, 'ranges': ranges}
+                 else:
+                      # Default if completely missing - might need adjustment
+                      print("Warning: Quantum model missing domain settings. Using default 1D grid.")
+                      simulation_params['domain_settings'] = {'dimensions': 1, 'points': [100], 'ranges': [(-10, 10)]}
+             
+             # Solver method (optional)
+             solver = model_props.get('solver', model_props.get('solver_method'))
+             if solver: simulation_params['solver_method'] = solver
+             
+             # Eigenstate calculation (optional)
+             eigen_calc = model_props.get('calculate_eigenstates')
+             if eigen_calc: simulation_params['calculate_eigenstates'] = eigen_calc
+             
         # --- Use pre-collected initial properties ---
         # Create the 'entities' dictionary needed by the simulator
         entities_for_simulator = {}
@@ -240,15 +268,12 @@ class Interpreter:
         # print(f"DEBUG (Interpreter): Final entities_for_simulator (id: {id(entities_for_simulator)}): {list(entities_for_simulator.keys())}") # Remove debug
         
         # --- Prepare interactions for the simulator --- 
-        # Use the helper function to get interactions in the right format
-        # Note: _get_interactions_for_model currently gets ALL interactions.
-        # The simulator itself filters based on entities present in the simulation state.
         interactions_for_simulator = self._get_interactions_for_model(model_name)
 
-        # --- DEBUG PRINT: Entities being passed to simulator ---
-        # print(f"\nDEBUG (Interpreter): Passing entities to simulator (id: {id(entities_for_simulator)}):") # Remove this older print
-        # for name, data in entities_for_simulator.items():
-        #      print(f"  '{name}': type='{data.get('type')}', props_keys={list(data.get('properties',{}).keys())}")
+        # --- DEBUG PRINT: Entities being passed to simulator (Detailed) ---
+        print(f"\nDEBUG (Interpreter): Passing entities to simulator:") 
+        for name, data in entities_for_simulator.items():
+             print(f"  '{name}': type='{data.get('type')}', properties={data.get('properties')}") # Print full properties
         # --- END DEBUG PRINT ---
 
         # Choose simulator based on model type
@@ -264,12 +289,14 @@ class Interpreter:
                 time_step=time_step
             )
         elif model_type == "quantum":
+            # Now pass the gathered simulation_params
             result = self.quantum_simulator.simulate(
                 entities=entities_for_simulator,
                 interactions=interactions_for_simulator, # Pass the prepared list
                 time_start=time_start,
                 time_end=time_end,
-                time_step=time_step
+                time_step=time_step,
+                simulation_params=simulation_params # Pass the new dict
             )
         else:
             raise ValueError(f"Unknown model type: {model_type}")
