@@ -1,6 +1,6 @@
 model simple_model:
     type: classical
-    time: 0..1
+    time: 0..5
     resolution: 0.01
 
 object ball:

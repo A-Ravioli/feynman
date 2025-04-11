@@ -21,7 +21,7 @@ class SimpleParser:
         self.interaction_pattern = re.compile(r'interaction\s+(\w+)\s*->\s*(\w+)\s*:')
         self.simulate_pattern = re.compile(r'simulate\s+(\w+)')
         self.visualize_pattern = re.compile(r'visualize\s+(\w+)(?:\s+on\s+(\w+))?')
-        self.property_pattern = re.compile(r'(\w+)\s*:\s*(.+)')
+        self.property_pattern = re.compile(r'(\w+)\s*:\s*(.*)')
         
         # For handling nested structures
         self.indent_size = 4
@@ -160,61 +160,81 @@ class SimpleParser:
         """Parse an atom block and return the new line index"""
         properties = {}
         
-        # Get indentation level for the block
-        if start_idx + 1 < len(lines):
-            block_indent = self._get_indent_level(lines[start_idx + 1])
+        if start_idx + 1 >= len(lines):
+            # No properties defined
+            atom = Atom(name=name, properties=properties)
+            self.program.add_atom(atom)
+            return start_idx + 1
             
-            # Process properties
-            i = start_idx + 1
-            nested_props = {}
-            current_nested = None
-            nested_indent = None
+        block_indent = self._get_indent_level(lines[start_idx + 1])
+        if block_indent <= self._get_indent_level(lines[start_idx]):
+            # No indented properties
+            atom = Atom(name=name, properties=properties)
+            self.program.add_atom(atom)
+            return start_idx + 1
             
-            while i < len(lines):
-                # Check if we're still within the block
-                indent = self._get_indent_level(lines[i])
-                if indent < block_indent:
-                    break
-                    
-                line = lines[i].strip()
+        i = start_idx + 1
+        current_nested_key = None
+        current_nested_props = {}
+
+        while i < len(lines):
+            line = lines[i]
+            indent = self._get_indent_level(line)
+
+            if indent < block_indent:
+                break # End of atom block
+
+            line_content = line.strip()
+            if not line_content: # Skip empty lines within block
+                 i += 1
+                 continue
+
+            prop_match = self.property_pattern.match(line_content)
+            if not prop_match:
+                 # Line doesn't match property pattern, maybe malformed? Skip.
+                 print(f"Warning: Skipping malformed line in atom '{name}': {line_content}")
+                 i += 1
+                 continue
+
+            prop_name = prop_match.group(1)
+            prop_value_str = prop_match.group(2).strip() # Matched value (can be empty)
+
+            if indent == block_indent:
+                # This is a top-level property within the atom block
+                # First, store any completed nested property block
+                if current_nested_key:
+                    properties[current_nested_key] = current_nested_props
+                    current_nested_key = None
+                    current_nested_props = {}
                 
-                if indent > block_indent and current_nested:
-                    # This is a nested property
-                    if nested_indent is None:
-                        nested_indent = indent
-                    
-                    if indent >= nested_indent:
-                        prop_match = self.property_pattern.match(line)
-                        if prop_match:
-                            nested_key = prop_match.group(1)
-                            nested_value = self._parse_value(prop_match.group(2))
-                            nested_props[nested_key] = nested_value
+                # Check if this line starts a *new* nested block
+                # Condition: Matched value is empty, indicating "key:" syntax
+                if prop_value_str == "": 
+                    current_nested_key = prop_name
+                    current_nested_props = {} # Reset for the new block
                 else:
-                    # This is a top-level property
-                    prop_match = self.property_pattern.match(line)
-                    if prop_match:
-                        prop_name = prop_match.group(1)
-                        
-                        # Check if this is the start of a nested block
-                        if prop_name and ":" in line and not self._is_simple_value(prop_match.group(2)):
-                            # Start a new nested property
-                            if current_nested:
-                                properties[current_nested] = nested_props
-                            current_nested = prop_name
-                            nested_props = {}
-                            nested_indent = None
-                        else:
-                            # Regular property
-                            prop_value = self._parse_value(prop_match.group(2))
-                            properties[prop_name] = prop_value
-                
-                i += 1
+                    # Regular top-level property
+                    properties[prop_name] = self._parse_value(prop_value_str)
+
+            elif indent > block_indent:
+                # This is a nested property line
+                if current_nested_key: 
+                    # Add property to the *current* nested block
+                    # Use prop_name and prop_value_str from the current line match
+                    nested_prop_name = prop_name
+                    nested_prop_value = self._parse_value(prop_value_str)
+                    current_nested_props[nested_prop_name] = nested_prop_value
+                else:
+                    # Indented line but no active nested block - error or ignore?
+                    print(f"Warning: Unexpected indentation for property '{prop_name}' in atom '{name}'. Ignoring.")
             
-            # Add the last nested property if any
-            if current_nested:
-                properties[current_nested] = nested_props
-        else:
-            i = start_idx + 1
+            # else: indent < block_indent handled by the break condition
+
+            i += 1
+
+        # Store the last nested property block if it exists
+        if current_nested_key:
+            properties[current_nested_key] = current_nested_props
         
         # Add the atom to the program
         atom = Atom(name=name, properties=properties)
@@ -282,7 +302,8 @@ class SimpleParser:
     
     def _parse_value(self, value_str: str) -> Any:
         """Parse a property value"""
-        value_str = value_str.strip()
+        # Strip inline comments first
+        value_str = value_str.split('#', 1)[0].strip()
         
         # Check for array
         if value_str.startswith('[') and value_str.endswith(']'):

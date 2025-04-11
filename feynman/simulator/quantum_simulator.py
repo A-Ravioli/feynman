@@ -179,7 +179,6 @@ class QuantumSimulator:
         # --- Simulate Each Quantum Entity (currently independent) ---
         # Future: Could handle interactions/entanglement here
         for name, entity in quantum_entities.items():
-            print(f"Simulating quantum entity: {name}...")
             props = entity["properties"]
             mass = float(props.get("mass", self.m_e))
             spin = props.get("spin") # Placeholder for future use
@@ -206,8 +205,8 @@ class QuantumSimulator:
                     potential_applied = True
             
             if not potential_applied:
-                print(f"  Warning: No potential applied to entity '{name}'.")
-                
+                pass # Keep pass for clarity
+            
             V_op_real = diags([V_potential.flatten()], [0], shape=(total_points, total_points), format='csr') # Sparse diagonal matrix
 
             # Full Hamiltonian (Real Space) - Needed for eigenstates & energy
@@ -231,7 +230,6 @@ class QuantumSimulator:
             psi_0 = psi_0_flat.reshape(n_points) # Reshape back for split-operator
 
             # --- Time Evolution ---
-            print(f"  Evolving using {solver_method} method...")
             psi_t_flat = np.zeros((num_steps, total_points), dtype=complex)
             psi_t_flat[0, :] = psi_0_flat
             
@@ -242,16 +240,11 @@ class QuantumSimulator:
                 
                 current_psi = psi_0.copy() # Work with multi-dimensional array
                 for i in range(1, num_steps):
-                    # Split-Operator Step: V/2 -> T -> V/2
                     current_psi *= exp_V                                  # Apply V/2
                     psi_k = fftshift(fftn(current_psi))                   # FFT to momentum space
                     psi_k *= exp_T                                        # Apply T
                     current_psi = ifftn(ifftshift(psi_k))                 # IFFT back to position space
                     current_psi *= exp_V                                  # Apply V/2
-                    
-                    # Optional normalization check/enforcement (numerical drift)
-                    # norm = np.sqrt(np.sum(np.abs(current_psi)**2) * volume_element)
-                    # current_psi /= norm
                     
                     psi_t_flat[i, :] = current_psi.flatten()
 
@@ -260,20 +253,13 @@ class QuantumSimulator:
                 evolution_op_sparse = -1j * H_real * time_step / self.hbar
                 current_psi_flat = psi_0_flat.copy()
                 for i in range(1, num_steps):
-                    # expm_multiply is efficient for sparse matrix * vector
                     current_psi_flat = expm_multiply(evolution_op_sparse, current_psi_flat)
-                    # Optional normalization
-                    # norm = np.linalg.norm(current_psi_flat) * np.sqrt(volume_element)
-                    # current_psi_flat /= norm
                     psi_t_flat[i, :] = current_psi_flat
 
             # --- Calculate Observables ---
-            print("  Calculating observables...")
             prob_density_flat = np.abs(psi_t_flat)**2
-            
-            # Reshape for easier calculation where needed
-            # psi_t = psi_t_flat.reshape((num_steps,) + tuple(n_points))
-            # prob_density = prob_density_flat.reshape((num_steps,) + tuple(n_points))
+            # Correct sum over space (axis=1) for each time step
+            prob_sum_per_step = np.sum(prob_density_flat * volume_element, axis=1)
 
             # <Position>
             expected_position = np.zeros((num_steps, dims))
@@ -283,8 +269,6 @@ class QuantumSimulator:
                  expected_position[:, d] = np.sum(coord_grid.flatten() * prob_density_flat, axis=1) * volume_element
 
             # <Momentum> (using Fourier transform method for simplicity)
-            # p = -iħ∇
-            # <p> = ∫ ψ* (-iħ∇) ψ dV
             expected_momentum = np.zeros((num_steps, dims))
             k_grids_shifted = [fftshift(2 * np.pi * np.fft.fftfreq(n, d)) for n, d in zip(n_points, deltas)]
             k_mesh_shifted = np.meshgrid(*k_grids_shifted, indexing='ij')
@@ -300,7 +284,6 @@ class QuantumSimulator:
                      for d in range(dims):
                          expected_momentum[i, d] = self.hbar * np.sum(k_mesh_shifted[d] * prob_density_k) / norm_k
 
-
             # <Energy> = <H> = <T> + <V>
             # <V> = ∫ V(r) |ψ(r)|² dV
             expected_potential_energy = np.sum(V_potential.flatten() * prob_density_flat, axis=1) * volume_element
@@ -315,9 +298,7 @@ class QuantumSimulator:
             expected_energy = expected_kinetic_energy + expected_potential_energy
 
             # --- Store Results for Entity ---
-            results["entities"][name] = {
-                "wavefunction_flat": psi_t_flat, # Store flat version for consistency
-                "probability_density_flat": prob_density_flat,
+            results_entity = {
                 "expected_position": expected_position,
                 "expected_momentum": expected_momentum,
                 "expected_kinetic_energy": expected_kinetic_energy,
@@ -329,12 +310,12 @@ class QuantumSimulator:
                 "mass": mass,
                 "spin": spin, # Include placeholder info
             }
+            results["entities"][name] = results_entity
 
             # --- Optional: Calculate Eigenstates ---
             eigenstate_calc_info = simulation_params.get('calculate_eigenstates')
             if eigenstate_calc_info and isinstance(eigenstate_calc_info, dict):
                 num_states = eigenstate_calc_info.get('num_states', 5)
-                print(f"  Calculating {num_states} lowest eigenstates...")
                 try:
                     # Use shift-invert mode for better convergence for lowest eigenvalues
                     # 'sigma=0' finds eigenvalues near 0. Adjust if needed (e.g., ground state energy estimate)
@@ -352,15 +333,13 @@ class QuantumSimulator:
                          norm = np.sqrt(np.sum(np.abs(vec)**2) * volume_element)
                          eigenvectors_normalized_flat[:, j] = vec / norm
 
-                    results["entities"][name]["eigenstates"] = {
+                    results_eigen = {
                         "eigenvalues": np.real(eigenvalues), # Usually real for Hermitian H
-                        "eigenvectors_flat": eigenvectors_normalized_flat
                     }
-                    print(f"  Calculated eigenvalues: {np.real(eigenvalues)}")
+                    results["entities"][name]["eigenstates"] = results_eigen
                 except Exception as e:
                     warnings.warn(f"Eigenstate calculation failed for entity '{name}': {e}")
 
-        
         return results
     
     # --- Potential Function Evaluation ---

@@ -1,14 +1,22 @@
 model quantum_3d:
     type: quantum
-    time: 0..2
-    resolution: 0.01
+    time: 0..0.5 # Shorter time for faster 3D test
+    resolution: 0.05
+    # Add domain settings for 3D
+    domain_settings:
+        dimensions: 3
+        points: [30, 30, 30] # Keep grid size moderate for testing
+        ranges: [[-10, 10], [-10, 10], [-10, 10]]
+    # Optional: Specify solver
+    # solver_method: split_operator 
 
 atom electron:
     mass: 9.11e-31
     initial_state:
-        wavefunction: gaussian(center=-5.0, spread=0.5, k=5.0)
+        # Ensure parameters match dimensions (center/k should be lists of 3)
+        wavefunction: gaussian(center=[-5.0, 0, 0], spread=[0.5, 0.5, 0.5], k=[5.0, 0, 0])
 
-field barrier:
+field barrier: # Keep field definitions for potential future use/visualization
     type: barrier
     region: [[-1, -3, -3], [1, 3, 3]]
     color: yellow
@@ -18,8 +26,9 @@ field detector:
     region: [[5, -4, -4], [6, 4, 4]]
     color: green
 
-interaction electron -> barrier:
-    potential: double_slit(position=0.0, slit_width=0.2, slit_separation=0.8)
+# Remove the interaction block for free particle test
+# interaction electron -> barrier:
+#    potential: double_slit(position=0.0, slit_width=0.2, slit_separation=0.8)
 
 simulate quantum_3d
 visualize electron
