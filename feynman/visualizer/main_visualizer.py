@@ -17,6 +17,14 @@ class FeynmanVisualizer(BaseVisualizer):
         """Initialize the main visualizer, detect data type, prepare specific data."""
         super().__init__(sim_data)
         
+        # --- Store visualization preferences from program ---
+        self.visualization_preferences = {}
+        if 'program' in sim_data and hasattr(sim_data['program'], 'visualizations'):
+            for vis in sim_data['program'].visualizations:
+                entity_name = vis.entity_name
+                vis_type = vis.visualization_type
+                self.visualization_preferences[entity_name] = vis_type
+
         # --- Detect Data Type and Prepare --- 
         self.has_classical_data = False
         self.has_quantum_data = False
@@ -77,25 +85,50 @@ class FeynmanVisualizer(BaseVisualizer):
         tabs_list = []
         default_tab = 'tab-info' # Default if no specific data
         
+        # Add tabs based on visualization preferences
+        vis_types = set(self.visualization_preferences.values())
+        
         # Add Classical Tabs if data exists
         if self.has_classical_data:
-             tabs_list.extend([
-                 dcc.Tab(label='2D Animation', value='tab-2d'),
-                 dcc.Tab(label='3D Animation', value='tab-3d'),
-                 dcc.Tab(label='Phase Space', value='tab-phase'),
-                 dcc.Tab(label='Classical Energy', value='tab-energy'),
-             ])
-             if default_tab == 'tab-info': default_tab = 'tab-2d'
-             
+            # Always include 2D visualization as default for classical
+            if not vis_types or None in vis_types:
+                tabs_list.extend([
+                    dcc.Tab(label='2D Animation', value='tab-2d'),
+                ])
+                if default_tab == 'tab-info': default_tab = 'tab-2d'
+            
+            # Add specific visualizations based on preferences
+            if not vis_types or '3d' in vis_types or '3D' in vis_types:
+                tabs_list.append(dcc.Tab(label='3D Animation', value='tab-3d'))
+                if default_tab == 'tab-info': default_tab = 'tab-3d'
+                
+            if not vis_types or 'phase' in vis_types or 'phase_space' in vis_types:
+                tabs_list.append(dcc.Tab(label='Phase Space', value='tab-phase'))
+                if default_tab == 'tab-info' and not '3d' in vis_types and not '3D' in vis_types:
+                    default_tab = 'tab-phase'
+                
+            if not vis_types or 'energy' in vis_types:
+                tabs_list.append(dcc.Tab(label='Classical Energy', value='tab-energy'))
+                if default_tab == 'tab-info' and not '3d' in vis_types and not '3D' in vis_types and not 'phase' in vis_types and not 'phase_space' in vis_types:
+                    default_tab = 'tab-energy'
+            
         # Add Quantum Tabs if data exists
         if self.has_quantum_data:
-            tabs_list.extend([
-                dcc.Tab(label='Probability Density', value='tab-prob'),
-                dcc.Tab(label='Expectation Values', value='tab-expval'),
-            ])
-            if self.available_eigenstates:
-                 tabs_list.append(dcc.Tab(label='Eigenstates', value='tab-eigen'))
-            if default_tab == 'tab-info': default_tab = 'tab-prob'
+            # Always include probability density as the default quantum visualization
+            if not vis_types or None in vis_types:
+                tabs_list.append(dcc.Tab(label='Probability Density', value='tab-prob'))
+                if default_tab == 'tab-info': default_tab = 'tab-prob'
+            
+            # Add specific quantum visualizations based on preferences
+            if not vis_types or 'expval' in vis_types or 'expectation' in vis_types:
+                tabs_list.append(dcc.Tab(label='Expectation Values', value='tab-expval'))
+                if default_tab == 'tab-info' and 'prob' not in vis_types:
+                    default_tab = 'tab-expval'
+            
+            if self.available_eigenstates and (not vis_types or 'eigen' in vis_types or 'eigenstates' in vis_types):
+                tabs_list.append(dcc.Tab(label='Eigenstates', value='tab-eigen'))
+                if default_tab == 'tab-info' and 'prob' not in vis_types and 'expval' not in vis_types and 'expectation' not in vis_types:
+                    default_tab = 'tab-eigen'
             
         # Fallback Info Tab
         if not tabs_list:

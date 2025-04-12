@@ -1,0 +1,26 @@
+model quantum_demo:
+    type: quantum
+    time: 0..2
+    resolution: 0.01
+    grid_size: 100
+    potential_type: harmonic
+
+atom electron:
+    mass: 1.0
+    initial_state:
+        type: gaussian
+        position: 0
+        width: 0.5
+        momentum: 1.0
+
+field harmonic_potential:
+    type: potential
+    formula: "0.5 * k * x^2"
+    k: 1.0
+
+simulate quantum_demo
+
+# Different quantum visualization types
+visualize electron as prob
+visualize electron as expval
+visualize electron as eigen 

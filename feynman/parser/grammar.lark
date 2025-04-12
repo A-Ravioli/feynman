@@ -27,7 +27,7 @@ interaction_prop: NAME ":" value _NL
 
 // Simulation statements
 simulate: "simulate" NAME _NL
-visualize: "visualize" NAME ["on" NAME] _NL
+visualize: "visualize" NAME ["as" NAME] ["on" NAME] _NL
 
 // Value types
 value: string | number | boolean | array | function_call | range | NAME

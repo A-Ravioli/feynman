@@ -34,6 +34,6 @@ interaction ball -> cube:
     G: 6.67e-11
 
 simulate simple_model
-visualize ball
-visualize cube
-visualize box 
+visualize ball as 3d
+visualize cube as phase_space
+visualize box as energy 

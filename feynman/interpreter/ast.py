@@ -151,6 +151,7 @@ class Simulate(Node):
 class Visualize(Node):
     entity_name: str
     target_name: Optional[str] = None
+    visualization_type: Optional[str] = None
 
 @dataclass
 class Program(Node):
