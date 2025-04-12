@@ -58,7 +58,8 @@ class Interpreter:
                 "time_points": np.array([]),
                 "entities": {},
                 "simulation_parameters": {},
-                "interactions": [] # Add empty interactions list
+                "interactions": [], # Add empty interactions list
+                "program": self.program  # Include the program
             }
 
         # --- Structure the results ---
@@ -73,7 +74,8 @@ class Interpreter:
                 "time_points": sim_output.get("time_points", np.array([])),
                 "entities": {},
                 "simulation_parameters": sim_output.get("simulation_parameters", {}), # Store params here
-                "interactions": relevant_interactions # Include interactions
+                "interactions": relevant_interactions, # Include interactions
+                "program": self.program  # Pass the program for visualization preferences
             }
 
             # Merge initial properties with time-series data
@@ -100,7 +102,8 @@ class Interpreter:
                 "time_points": np.array([]),
                 "entities": {},
                 "simulation_parameters": {},
-                "interactions": [] # Add empty interactions list
+                "interactions": [], # Add empty interactions list
+                "program": self.program  # Include the program
             }
     
     def _collect_initial_properties(self):

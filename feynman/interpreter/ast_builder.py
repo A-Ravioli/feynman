@@ -58,8 +58,23 @@ class ASTBuilder(Transformer):
     
     def visualize(self, items):
         entity_name = str(items[0])
-        target_name = str(items[1]) if len(items) > 1 else None
-        visualize = Visualize(entity_name=entity_name, target_name=target_name)
+        visualization_type = None
+        target_name = None
+        
+        # Check if we have additional items for visualization_type or target_name
+        if len(items) > 1:
+            # The second item could be either visualization_type or target_name
+            # In the grammar, this would need to be handled based on the token type or keywords
+            # For now, assuming a simple implementation where:
+            # - If 3 items: entity_name, visualization_type, target_name
+            # - If 2 items: entity_name, target_name
+            if len(items) > 2:
+                visualization_type = str(items[1])
+                target_name = str(items[2])
+            else:
+                target_name = str(items[1])
+        
+        visualize = Visualize(entity_name=entity_name, visualization_type=visualization_type, target_name=target_name)
         self.program.add_visualize(visualize)
         return visualize
     

@@ -20,7 +20,7 @@ class SimpleParser:
         self.field_pattern = re.compile(r'field\s+(\w+)\s*:')
         self.interaction_pattern = re.compile(r'interaction\s+(\w+)\s*->\s*(\w+)\s*:')
         self.simulate_pattern = re.compile(r'simulate\s+(\w+)')
-        self.visualize_pattern = re.compile(r'visualize\s+(\w+)(?:\s+on\s+(\w+))?')
+        self.visualize_pattern = re.compile(r'visualize\s+(\w+)(?:\s+as\s+(\w+))?(?:\s+on\s+(\w+))?')
         self.property_pattern = re.compile(r'(\w+)\s*:\s*(.*)')
         
         # For handling nested structures
@@ -92,8 +92,9 @@ class SimpleParser:
             match = self.visualize_pattern.match(line.strip())
             if match:
                 entity_name = match.group(1)
-                target_name = match.group(2) if match.group(2) else None
-                self.program.add_visualize(Visualize(entity_name=entity_name, target_name=target_name))
+                visualization_type = match.group(2) if match.group(2) else None
+                target_name = match.group(3) if match.group(3) else None
+                self.program.add_visualize(Visualize(entity_name=entity_name, visualization_type=visualization_type, target_name=target_name))
                 i += 1
                 continue
                 

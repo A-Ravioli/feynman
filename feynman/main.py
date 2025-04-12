@@ -112,23 +112,14 @@ class PhysicaLangCLI:
             # Run the interpreter
             results = self.interpreter.interpret(code)
             
-            # --- DEBUG PRINT: Results from Interpreter ---
-            # print("\nDEBUG: Results directly from interpreter:") # Remove debug
-            # Basic structure print to avoid huge output
-            # print(f"  Keys: {list(results.keys())}") # Remove debug
-            # if 'time_points' in results: print(f"  Time Points Length: {len(results['time_points'])}") # Remove debug
-            # if 'entities' in results: print(f"  Entities: {list(results['entities'].keys())}") # Remove debug
-            # if 'interactions' in results: print(f"  Interactions Count: {len(results['interactions'])}") # Remove debug
-            # print(results) # Uncomment for full data if needed
-            # --- END DEBUG PRINT ---
+            # Serialize results for JSON
+            serializable_results = self._make_json_serializable(results)
             
             # Save results
             print(f"Saving simulation results to {output_file}...")
             # Ensure parent directory exists
             os.makedirs(os.path.dirname(output_file) or '.', exist_ok=True)
             with open(output_file, "w") as f:
-                # Use the existing serializer for saving
-                serializable_results = self._make_json_serializable(results)
                 json.dump(serializable_results, f, indent=2)
             
             print(f"Simulation completed. Results saved to {output_file}")
@@ -137,21 +128,6 @@ class PhysicaLangCLI:
             if visualize:
                 # Load results back (potentially converting arrays)
                 loaded_results = _load_results_with_numpy(output_file)
-                
-                # --- DEBUG PRINT: Results after loading from JSON ---
-                # print("\nDEBUG: Results after loading from JSON:") # Remove debug
-                # print(f"  Keys: {list(loaded_results.keys())}") # Remove debug
-                # if 'time_points' in loaded_results: print(f"  Time Points Type: {type(loaded_results['time_points'])}") # Remove debug
-                # if 'entities' in loaded_results: print(f"  Entities: {list(loaded_results['entities'].keys())}") # Remove debug
-                # Check type of a position array to see if numpy conversion worked
-                # if 'entities' in loaded_results and loaded_results['entities']: # Remove debug
-                #      first_entity_name = list(loaded_results['entities'].keys())[0] # Remove debug
-                #      first_entity = loaded_results['entities'][first_entity_name] # Remove debug
-                #      if 'time_series' in first_entity and 'positions' in first_entity['time_series']: # Remove debug
-                #           pos_type = type(first_entity['time_series']['positions']) # Remove debug
-                #           print(f"  Position Array Type (first entity): {pos_type}") # Remove debug
-                # print(loaded_results) # Uncomment for full data if needed
-                # --- END DEBUG PRINT ---
                 
                 self.launch_visualizer(loaded_results)
             
@@ -209,6 +185,13 @@ class PhysicaLangCLI:
                     "imag": obj.imag.tolist()
                 }
             return obj.tolist()
+        elif hasattr(obj, '__dict__'):
+            # Handle custom class objects like Program
+            return {
+                "__class__": obj.__class__.__name__,
+                "data": {k: self._make_json_serializable(v) for k, v in obj.__dict__.items() 
+                         if not k.startswith('_')}
+            }
         elif isinstance(obj, dict):
             return {k: self._make_json_serializable(v) for k, v in obj.items()}
         elif isinstance(obj, list):
