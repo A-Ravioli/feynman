@@ -132,6 +132,18 @@ class QuantumSimulator:
         Returns:
             Dictionary containing simulation results for each entity.
         """
+        # Input validation
+        if not isinstance(entities, dict):
+            raise TypeError("entities must be a dictionary")
+        if not isinstance(interactions, list):
+            raise TypeError("interactions must be a list")
+        if time_end <= time_start:
+            raise ValueError("time_end must be greater than time_start")
+        if time_step <= 0:
+            raise ValueError("time_step must be positive")
+        if time_step > (time_end - time_start):
+            raise ValueError("time_step too large for simulation time range")
+        
         self.entities = entities # Store for potential lookups if needed
         self.interactions = interactions
         
@@ -145,10 +157,21 @@ class QuantumSimulator:
         
         if not all([dims, points, ranges]):
              raise ValueError("Missing 'dimensions', 'points', or 'ranges' in domain_settings.")
-        if not (1 <= dims <= 3):
-            raise ValueError("Simulator currently supports 1, 2, or 3 dimensions.")
-        if len(points) != dims or len(ranges) != dims:
-            raise ValueError("Length of 'points' and 'ranges' must match 'dimensions'.")
+        if not isinstance(dims, int) or not (1 <= dims <= 3):
+            raise ValueError("dimensions must be an integer between 1 and 3.")
+        if not isinstance(points, list) or len(points) != dims:
+            raise ValueError("points must be a list with length equal to dimensions.")
+        if not isinstance(ranges, list) or len(ranges) != dims:
+            raise ValueError("ranges must be a list with length equal to dimensions.")
+        
+        # Validate points and ranges
+        for i, (p, r) in enumerate(zip(points, ranges)):
+            if not isinstance(p, int) or p < 10:
+                raise ValueError(f"points[{i}] must be an integer >= 10")
+            if not isinstance(r, (list, tuple)) or len(r) != 2:
+                raise ValueError(f"ranges[{i}] must be a list/tuple of length 2")
+            if r[1] <= r[0]:
+                raise ValueError(f"ranges[{i}] must have second element > first element")
 
         solver_method = simulation_params.get('solver_method', 'split_operator').lower()
         if solver_method not in ['split_operator', 'expm']:
@@ -235,16 +258,21 @@ class QuantumSimulator:
             
             if solver_method == 'split_operator':
                 # Pre-calculate evolution operators for efficiency
-                exp_V = np.exp(-1j * V_potential * time_step / (2 * self.hbar)) # Position space V/2
+                exp_V_half = np.exp(-1j * V_potential * time_step / (2 * self.hbar)) # Position space V/2
                 exp_T = np.exp(-1j * T_op_fourier * time_step / self.hbar)      # Momentum space T
                 
                 current_psi = psi_0.copy() # Work with multi-dimensional array
+                
+                # Preallocate FFT workspace for better performance
+                fft_workspace = np.empty_like(current_psi, dtype=complex)
+                
                 for i in range(1, num_steps):
-                    current_psi *= exp_V                                  # Apply V/2
-                    psi_k = fftshift(fftn(current_psi))                   # FFT to momentum space
-                    psi_k *= exp_T                                        # Apply T
-                    current_psi = ifftn(ifftshift(psi_k))                 # IFFT back to position space
-                    current_psi *= exp_V                                  # Apply V/2
+                    # Split-operator method: e^(-iH*dt) ≈ e^(-iV*dt/2) * e^(-iT*dt) * e^(-iV*dt/2)
+                    current_psi *= exp_V_half                                # Apply V/2
+                    fft_workspace[:] = fftshift(fftn(current_psi))          # FFT to momentum space
+                    fft_workspace *= exp_T                                   # Apply T in momentum space
+                    current_psi[:] = ifftn(ifftshift(fft_workspace))        # IFFT back to position space
+                    current_psi *= exp_V_half                                # Apply V/2
                     
                     psi_t_flat[i, :] = current_psi.flatten()
 
@@ -258,42 +286,49 @@ class QuantumSimulator:
 
             # --- Calculate Observables ---
             prob_density_flat = np.abs(psi_t_flat)**2
-            # Correct sum over space (axis=1) for each time step
-            prob_sum_per_step = np.sum(prob_density_flat * volume_element, axis=1)
+            
+            # Pre-calculate coordinate grids for position expectation values
+            coord_grids = [np.meshgrid(*grid_coords, indexing='ij')[d] for d in range(dims)]
+            coord_grids_flat = [grid.flatten() for grid in coord_grids]
 
-            # <Position>
+            # <Position> - optimized calculation
             expected_position = np.zeros((num_steps, dims))
             for d in range(dims):
-                 # Create a grid representing the d-th coordinate values broadcasted to the full grid shape
-                 coord_grid = np.meshgrid(*grid_coords, indexing='ij')[d]
-                 expected_position[:, d] = np.sum(coord_grid.flatten() * prob_density_flat, axis=1) * volume_element
+                expected_position[:, d] = np.sum(coord_grids_flat[d] * prob_density_flat, axis=1) * volume_element
 
-            # <Momentum> (using Fourier transform method for simplicity)
+            # <Momentum> (using Fourier transform method)
             expected_momentum = np.zeros((num_steps, dims))
             k_grids_shifted = [fftshift(2 * np.pi * np.fft.fftfreq(n, d)) for n, d in zip(n_points, deltas)]
             k_mesh_shifted = np.meshgrid(*k_grids_shifted, indexing='ij')
 
+            # Pre-allocate workspace for momentum calculations
+            psi_k_workspace = np.empty(n_points, dtype=complex)
+            prob_density_k_workspace = np.empty(n_points, dtype=float)
+            
             for i in range(num_steps):
-                 psi_current_flat = psi_t_flat[i, :]
-                 psi_current = psi_current_flat.reshape(n_points)
-                 psi_k = fftshift(fftn(psi_current)) # Get momentum space wavefunction
-                 prob_density_k = np.abs(psi_k)**2
-                 norm_k = np.sum(prob_density_k) # Normalization in k-space (Parseval's theorem)
+                psi_current_flat = psi_t_flat[i, :]
+                psi_current = psi_current_flat.reshape(n_points)
+                psi_k_workspace[:] = fftshift(fftn(psi_current))
+                prob_density_k_workspace[:] = np.abs(psi_k_workspace)**2
+                norm_k = np.sum(prob_density_k_workspace)
 
-                 if norm_k > 1e-12 :
-                     for d in range(dims):
-                         expected_momentum[i, d] = self.hbar * np.sum(k_mesh_shifted[d] * prob_density_k) / norm_k
+                if norm_k > 1e-12:
+                    for d in range(dims):
+                        expected_momentum[i, d] = self.hbar * np.sum(k_mesh_shifted[d] * prob_density_k_workspace) / norm_k
 
-            # <Energy> = <H> = <T> + <V>
+            # <Energy> calculations - optimized
             # <V> = ∫ V(r) |ψ(r)|² dV
-            expected_potential_energy = np.sum(V_potential.flatten() * prob_density_flat, axis=1) * volume_element
-            # <T> = ∫ ψ* (T_op) ψ dV
-            # Applying sparse T_op_real to each time step's state vector
+            V_flat = V_potential.flatten()
+            expected_potential_energy = np.sum(V_flat * prob_density_flat, axis=1) * volume_element
+            
+            # <T> = ∫ ψ* (T_op) ψ dV - batch calculation
             expected_kinetic_energy = np.zeros(num_steps)
+            T_psi_workspace = np.empty(total_points, dtype=complex)
+            
             for i in range(num_steps):
                 psi_vector = psi_t_flat[i, :]
-                T_psi = T_op_real.dot(psi_vector)
-                expected_kinetic_energy[i] = np.real(np.vdot(psi_vector, T_psi)) * volume_element # ψ* T ψ
+                T_psi_workspace[:] = T_op_real.dot(psi_vector)
+                expected_kinetic_energy[i] = np.real(np.vdot(psi_vector, T_psi_workspace)) * volume_element
             
             expected_energy = expected_kinetic_energy + expected_potential_energy
 
