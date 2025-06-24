@@ -109,23 +109,7 @@ class Interpreter:
     def _collect_initial_properties(self):
         """Helper method to gather initial properties from the parsed program."""
         self._initial_entity_properties = {}
-        # print("\nDEBUG (Interpreter): Collecting initial properties...") # Remove debug
-        program_objects = getattr(self.program, 'objects', None)
-        # print(f"DEBUG: Type of self.program.objects: {type(program_objects)}") # Remove debug
-        # print(f"DEBUG: self.program.objects keys: {list(program_objects.keys()) if isinstance(program_objects, dict) else 'N/A'}") # Remove debug
         
-        # Try iterating and printing here
-        # print("DEBUG: Iterating self.program.objects.items() in _collect_initial_properties:") # Remove debug
-        # try: # Remove debug
-        #     if hasattr(program_objects, 'items'): # Remove debug
-        #          for name, obj in program_objects.items(): # Remove debug
-        #               print(f"  Item: '{name}' -> Type: {type(obj)}") # Remove debug
-        #     else: # Remove debug
-        #          print("  self.program.objects has no 'items' method or is None.") # Remove debug
-        # except Exception as e: # Remove debug
-        #     print(f"  Error iterating: {e}") # Remove debug
-        # print("DEBUG: Finished iterating.") # Remove debug
-
         # Add objects (classical entities)
         # Iterate through VALUES (Object instances), not keys!
         for obj in self.program.objects.values(): 
@@ -251,41 +235,23 @@ class Interpreter:
         # --- Use pre-collected initial properties ---
         # Create the 'entities' dictionary needed by the simulator
         entities_for_simulator = {}
-        # print(f"DEBUG (Interpreter): Initial entities_for_simulator (id: {id(entities_for_simulator)}): {list(entities_for_simulator.keys())}") # Remove debug
-        for i, (name, props) in enumerate(self._initial_entity_properties.items()): 
-            # print(f"DEBUG (Interpreter): Loop {i}, adding '{name}'") # Remove debug
+        for name, props in self._initial_entity_properties.items(): 
             # Determine entity type (object, atom, field) based on stored props or defaults
-            entity_type = "object" # Default assumption, adjust if props contain type info
-            if 'type' in props:
-                entity_type = props['type']
-            # Or infer based on which list it came from (objects, atoms, fields) if needed
-            # For now, assume props might contain a 'type' hint or default to 'object'
+            entity_type = props.get('type', 'object')  # Default to 'object' if type not specified
 
             value_to_assign = {
                 "type": entity_type, # Pass type to simulator
                 "properties": props # Pass all initial properties
             }
             entities_for_simulator[name] = value_to_assign
-            # print(f"DEBUG (Interpreter):   After adding '{name}', keys: {list(entities_for_simulator.keys())}") # Remove debug
 
-        # print(f"DEBUG (Interpreter): Final entities_for_simulator (id: {id(entities_for_simulator)}): {list(entities_for_simulator.keys())}") # Remove debug
-        
         # --- Prepare interactions for the simulator --- 
         interactions_for_simulator = self._get_interactions_for_model(model_name)
 
-        # --- DEBUG PRINT: Entities being passed to simulator (Detailed) ---
-        print(f"\nDEBUG (Interpreter): Passing entities to simulator:") 
-        for name, data in entities_for_simulator.items():
-             print(f"  '{name}': type='{data.get('type')}', properties={data.get('properties')}") # Print full properties
-        # --- END DEBUG PRINT ---
-
         # Choose simulator based on model type
         if model_type == "classical":
-            # --- Pass a copy to isolate from potential side effects ---
-            entities_copy = entities_for_simulator.copy()
-            # print(f"DEBUG (Interpreter): Passing COPY of entities (orig id: {id(entities_for_simulator)}, copy id: {id(entities_copy)}) with keys: {list(entities_copy.keys())}") # Remove debug
             result = self.classical_simulator.simulate(
-                entities=entities_copy, # Pass the copy
+                entities=entities_for_simulator,
                 interactions=interactions_for_simulator,
                 time_start=time_start,
                 time_end=time_end,

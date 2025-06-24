@@ -25,37 +25,18 @@ class ClassicalSimulator:
     def simulate(self, entities: Dict[str, Any], interactions: List[Dict[str, Any]], 
                  time_start: float, time_end: float, time_step: float) -> Dict[str, Any]:
         """Run a classical physics simulation"""
-        # --- Delay assignment to self.entities ---
-        # self.entities = entities 
-        # --- 
         self.interactions = interactions
         
-        # --- DEBUG PRINT: Entities received by simulator ---
-        print(f"\nDEBUG (Simulator): Received entities (id: {id(entities)}, Keys: {list(entities.keys())})") # Add id()
-        # Add a simple loop to check items()
-        print("DEBUG (Simulator): Iterating through entities.items() before filter:")
-        for name, props_item in entities.items():
-             print(f"  Item: '{name}' -> Type='{props_item.get('type')}'")
-        print("DEBUG (Simulator): Finished iterating. Starting filter...")
-        # --- END DEBUG PRINT ---
-        
         # Filter to get just the classical objects
-        # USE THE LOCAL 'entities' variable for filtering, NOT self.entities
         classical_objects = {
             name: props for name, props in entities.items()
-            if (print(f"DEBUG (Filtering): Checking '{name}', props['type']='{props.get('type', 'N/A')}', type={type(props.get('type'))}, check result={props.get('type') == 'object'}") is None) and (props.get("type") == "object")
+            if props.get("type") == "object"
         }
         
-        # --- Assign to self.entities AFTER filtering and initial use ---
+        # Assign to self.entities AFTER filtering
         self.entities = entities
-        # ---
-        
-        # --- DEBUG PRINT: Filtered classical objects ---
-        print(f"\nDEBUG (Simulator): Filtered classical_objects keys: {list(classical_objects.keys())}")
-        # --- END DEBUG PRINT ---
         
         if not classical_objects:
-            print("DEBUG (Simulator): No classical objects found after filtering, returning empty entities.") # Add log here
             return {
                 "time_points": np.arange(time_start, time_end + time_step, time_step),
                 "entities": {}
@@ -85,7 +66,9 @@ class ClassicalSimulator:
             [time_start, time_end],
             initial_state,
             t_eval=time_points,
-            method="RK45"
+            method="RK45",
+            rtol=1e-8,  # Add better tolerance control
+            atol=1e-11
         )
         
         # Extract results
@@ -192,24 +175,29 @@ class ClassicalSimulator:
     
     # Force functions
     def _coulomb_force(self, pos1, pos2, mass1=1.0, mass2=1.0, k=8.99e9, q1=1.0, q2=1.0):
-        """Calculate Coulomb force between two charged particles"""
-        r_vec = pos2 - pos1
+        """Calculate Coulomb force between two charged particles
+        Returns force on charge q2 due to charge q1"""
+        r_vec = pos2 - pos1  # Vector from q1 to q2
         r = np.linalg.norm(r_vec)
         if r < 1e-10:  # Avoid division by zero
             return np.zeros(3)
         r_hat = r_vec / r
         force_magnitude = k * q1 * q2 / (r * r)
+        # For like charges (same sign), force is repulsive (positive direction)
+        # For unlike charges (opposite sign), force is attractive (negative direction)
         return force_magnitude * r_hat
     
     def _gravity_force(self, pos1, pos2, mass1=1.0, mass2=1.0, G=6.67430e-11):
-        """Calculate gravitational force between two masses"""
-        r_vec = pos2 - pos1
+        """Calculate gravitational force between two masses
+        Returns force on mass2 due to mass1"""
+        r_vec = pos2 - pos1  # Vector from mass1 to mass2
         r = np.linalg.norm(r_vec)
         if r < 1e-10:  # Avoid division by zero
             return np.zeros(3)
         r_hat = r_vec / r
         force_magnitude = G * mass1 * mass2 / (r * r)
-        return force_magnitude * r_hat
+        # Gravitational force is attractive, so force on mass2 points toward mass1
+        return -force_magnitude * r_hat
     
     def _spring_force(self, pos1, pos2, mass1=1.0, mass2=1.0, k=1.0, rest_length=0.0):
         """Calculate spring force between two objects"""
