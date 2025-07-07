@@ -1,0 +1,30 @@
+model collision_demo:
+    type: classical
+    time: 0..10
+    resolution: 0.01
+
+object ball1:
+    mass: 1.0
+    position: [-2, 0, 0]
+    velocity: [2, 0, 0]
+    size: 0.5
+    color: red
+
+object ball2:
+    mass: 1.0
+    position: [2, 0, 0]
+    velocity: [-1.5, 0, 0]
+    size: 0.5
+    color: blue
+
+object ball3:
+    mass: 2.0
+    position: [0, 2, 0]
+    velocity: [0, -1, 0]
+    size: 0.3
+    color: green
+
+simulate collision_demo
+visualize ball1 as 3d
+visualize ball2 as 3d
+visualize ball3 as 3d

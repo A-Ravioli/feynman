@@ -107,22 +107,69 @@ class SimpleParser:
         """Parse a model block and return the new line index"""
         properties = {}
         
-        # Get indentation level for the block
-        if start_idx + 1 < len(lines):
-            block_indent = self._get_indent_level(lines[start_idx + 1])
+        if start_idx + 1 >= len(lines):
+            model = Model(name=name, properties=properties)
+            self.program.add_model(model)
+            return start_idx + 1
             
-            # Process properties
-            i = start_idx + 1
-            while i < len(lines) and self._get_indent_level(lines[i]) >= block_indent:
-                line = lines[i].strip()
-                prop_match = self.property_pattern.match(line)
-                if prop_match:
-                    prop_name = prop_match.group(1)
-                    prop_value = self._parse_value(prop_match.group(2))
-                    properties[prop_name] = prop_value
+        block_indent = self._get_indent_level(lines[start_idx + 1])
+        if block_indent <= self._get_indent_level(lines[start_idx]):
+            model = Model(name=name, properties=properties)
+            self.program.add_model(model)
+            return start_idx + 1
+            
+        i = start_idx + 1
+        current_nested_key = None
+        current_nested_props = {}
+
+        while i < len(lines):
+            line = lines[i]
+            indent = self._get_indent_level(line)
+
+            if indent < block_indent:
+                break
+
+            line_content = line.strip()
+            if not line_content:
                 i += 1
-        else:
-            i = start_idx + 1
+                continue
+
+            prop_match = self.property_pattern.match(line_content)
+            if not prop_match:
+                print(f"Warning: Skipping malformed line in model '{name}': {line_content}")
+                i += 1
+                continue
+
+            prop_name = prop_match.group(1)
+            prop_value_str = prop_match.group(2).strip()
+
+            if indent == block_indent:
+                # Store any completed nested property block
+                if current_nested_key:
+                    properties[current_nested_key] = current_nested_props
+                    current_nested_key = None
+                    current_nested_props = {}
+                
+                # Check if this starts a new nested block
+                if prop_value_str == "":
+                    current_nested_key = prop_name
+                    current_nested_props = {}
+                else:
+                    properties[prop_name] = self._parse_value(prop_value_str)
+
+            elif indent > block_indent:
+                # Nested property line
+                if current_nested_key:
+                    nested_prop_value = self._parse_value(prop_value_str)
+                    current_nested_props[prop_name] = nested_prop_value
+                else:
+                    print(f"Warning: Unexpected indentation for property '{prop_name}' in model '{name}'. Ignoring.")
+            
+            i += 1
+
+        # Store the last nested property block if it exists
+        if current_nested_key:
+            properties[current_nested_key] = current_nested_props
         
         # Add the model to the program
         model = Model(name=name, properties=properties)

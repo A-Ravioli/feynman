@@ -7,6 +7,7 @@ from feynman.interpreter.ast_builder import ASTBuilder
 from feynman.interpreter.ast import Program, Model, Object, Atom, Field, Interaction
 from feynman.simulator.classical_simulator import ClassicalSimulator
 from feynman.simulator.quantum_simulator import QuantumSimulator
+from feynman.validation import PhysicsValidator, ValidationError
 
 class Interpreter:
     def __init__(self):
@@ -18,6 +19,7 @@ class Interpreter:
         self.simulation_results = {}
         self.classical_simulator = ClassicalSimulator()
         self.quantum_simulator = QuantumSimulator()
+        self.validator = PhysicsValidator()
     
     def interpret(self, code: str) -> Dict[str, Any]:
         """Interpret PhysicaLang code, run simulations, and return structured results.
@@ -40,6 +42,28 @@ class Interpreter:
         # No longer need to remove this, relying on _collect_initial_properties to clear
         # self._initial_entity_properties = {} 
         self.simulation_results = {} # Still need to clear sim results
+
+        # --- Validate Program ---
+        try:
+            is_valid, warnings, errors = self.validator.validate_program(self.program)
+            
+            if warnings:
+                print("⚠️  Validation warnings:")
+                for warning in warnings:
+                    print(f"   {warning}")
+            
+            if not is_valid:
+                print("❌ Validation failed:")
+                for error in errors:
+                    print(f"   {error}")
+                raise ValidationError("Program validation failed. Please fix the errors above.")
+            
+            if not warnings and not errors:
+                print("✅ Program validation passed")
+                
+        except Exception as e:
+            print(f"⚠️  Validation check failed: {e}")
+            print("Proceeding with simulation but results may be unreliable...")
 
         # --- Collect Initial Properties First ---
         self._collect_initial_properties()

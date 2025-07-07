@@ -39,9 +39,9 @@ def _build_kinetic_operator_finite_diff(dims: int, n_points: List[int], deltas: 
         nx = n_points[i]
         dx = deltas[i]
         
-        # 1D Laplacian
-        diag_vals = np.ones(nx) * 2.0
-        offdiag_vals = np.ones(nx - 1) * -1.0
+        # 1D Laplacian with correct finite difference: d²/dx² ≈ (ψ[i-1] - 2ψ[i] + ψ[i+1])/dx²
+        diag_vals = np.ones(nx) * -2.0  # Main diagonal: -2
+        offdiag_vals = np.ones(nx - 1) * 1.0  # Off-diagonals: +1
         laplacian_1d = diags([offdiag_vals, diag_vals, offdiag_vals], [-1, 0, 1], shape=(nx, nx), format='csr')
 
         # Kronecker product to extend to N dimensions
@@ -344,6 +344,9 @@ class QuantumSimulator:
                 "type": "atom",
                 "mass": mass,
                 "spin": spin, # Include placeholder info
+                # Add wavefunction data for visualization and tests
+                "wavefunction_flat": psi_t_flat,  # Complex wavefunction over time
+                "probability_density_flat": prob_density_flat,  # |ψ|² over time
             }
             results["entities"][name] = results_entity
 

@@ -21,6 +21,10 @@ class ClassicalSimulator:
             "infinite_barrier": self._infinite_barrier,
             "infinite_barrier_except": self._infinite_barrier_except,
         }
+        
+        # Collision detection settings
+        self.enable_collisions = True
+        self.collision_restitution = 0.8  # Coefficient of restitution for elastic collisions
     
     def simulate(self, entities: Dict[str, Any], interactions: List[Dict[str, Any]], 
                  time_start: float, time_end: float, time_step: float) -> Dict[str, Any]:
@@ -158,6 +162,10 @@ class ClassicalSimulator:
                 # Apply reaction force to source (Newton's 3rd Law)
                 forces[source] -= force_on_target
 
+        # Handle collisions if enabled
+        if self.enable_collisions:
+            self._handle_collisions(positions, velocities, masses, forces, object_names[:num_objects])
+
         # Now apply forces to calculate accelerations
         for i, name in enumerate(object_names[:num_objects]):
             base_idx = i * 6
@@ -255,4 +263,62 @@ class ClassicalSimulator:
             # Check if position is within any hole
             if all(hole[0][i] <= pos[i] <= hole[1][i] for i in range(min(len(hole[0]), len(pos)))):
                 return 0.0
-        return float('inf') 
+        return float('inf')
+    
+    def _handle_collisions(self, positions, velocities, masses, forces, object_names):
+        """Handle particle collisions using sphere-sphere collision detection"""
+        for i in range(len(object_names)):
+            for j in range(i + 1, len(object_names)):
+                name1, name2 = object_names[i], object_names[j]
+                
+                # Get object sizes (assume spherical)
+                props1 = self.entities[name1]["properties"]
+                props2 = self.entities[name2]["properties"]
+                
+                radius1 = props1.get("size", 0.5)  # Default radius
+                radius2 = props2.get("size", 0.5)
+                
+                # Check for collision
+                r_vec = positions[name2] - positions[name1]
+                distance = np.linalg.norm(r_vec)
+                collision_distance = radius1 + radius2
+                
+                if distance < collision_distance and distance > 1e-10:
+                    # Collision detected - apply impulse response
+                    self._resolve_collision(
+                        positions, velocities, masses, forces,
+                        name1, name2, r_vec, distance, collision_distance
+                    )
+    
+    def _resolve_collision(self, positions, velocities, masses, forces, 
+                          name1, name2, r_vec, distance, collision_distance):
+        """Resolve collision between two objects using impulse-momentum method"""
+        # Separate objects to prevent overlap
+        overlap = collision_distance - distance
+        r_hat = r_vec / distance
+        
+        # Move objects apart proportional to their masses
+        total_mass = masses[name1] + masses[name2]
+        move1 = -overlap * masses[name2] / total_mass
+        move2 = overlap * masses[name1] / total_mass
+        
+        positions[name1] += move1 * r_hat
+        positions[name2] += move2 * r_hat
+        
+        # Calculate relative velocity
+        v_rel = velocities[name2] - velocities[name1]
+        v_rel_normal = np.dot(v_rel, r_hat)
+        
+        # Objects moving apart - no collision response needed
+        if v_rel_normal > 0:
+            return
+        
+        # Calculate collision impulse
+        impulse_magnitude = -(1 + self.collision_restitution) * v_rel_normal
+        impulse_magnitude /= (1/masses[name1] + 1/masses[name2])
+        
+        impulse = impulse_magnitude * r_hat
+        
+        # Apply impulse to velocities
+        velocities[name1] -= impulse / masses[name1]
+        velocities[name2] += impulse / masses[name2] 
