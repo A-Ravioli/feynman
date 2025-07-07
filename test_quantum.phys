@@ -1,0 +1,30 @@
+simulation quantum_particle {
+    time_range 0.0 to 1.0 step 0.01
+    
+    domain_settings {
+        x_min -2.0
+        x_max 2.0
+        y_min -2.0
+        y_max 2.0
+        z_min -2.0
+        z_max 2.0
+        nx 50
+        ny 50
+        nz 50
+    }
+    
+    atom electron {
+        mass 9.109e-31
+        charge -1.602e-19
+        position 0.0 0.0 0.0
+        energy 1.0
+        sigma_x 0.5
+        sigma_y 0.5
+        sigma_z 0.5
+    }
+    
+    potential harmonic {
+        k 1.0
+        center 0.0 0.0 0.0
+    }
+}

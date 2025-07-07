@@ -1,0 +1,18 @@
+{
+  "time_points": [],
+  "entities": {},
+  "simulation_parameters": {},
+  "interactions": [],
+  "program": {
+    "__class__": "Program",
+    "data": {
+      "models": {},
+      "objects": {},
+      "atoms": {},
+      "fields": {},
+      "interactions": [],
+      "simulations": [],
+      "visualizations": []
+    }
+  }
+}
