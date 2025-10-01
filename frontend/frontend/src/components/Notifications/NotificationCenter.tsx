@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, CheckCircle, AlertCircle, AlertTriangle, Info } from 'lucide-react';
-import { NotificationMessage } from '../../types';
+import type { NotificationMessage } from '../../types';
 
 interface NotificationCenterProps {
   notifications: NotificationMessage[];

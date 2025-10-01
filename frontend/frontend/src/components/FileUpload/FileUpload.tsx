@@ -41,9 +41,9 @@ const FileUpload: React.FC<FileUploadProps> = ({ onFileUpload, onNotification })
       setUploadProgress(100);
       clearInterval(progressInterval);
       onNotification('success', 'Upload Complete', `Successfully uploaded ${file.name}`);
-    } catch (error) {
+    } catch (uploadError) {
       clearInterval(progressInterval);
-      onNotification('error', 'Upload Failed', error instanceof Error ? error.message : 'Unknown error');
+      onNotification('error', 'Upload Failed', uploadError instanceof Error ? uploadError.message : 'Unknown error');
     } finally {
       setUploading(false);
       setTimeout(() => setUploadProgress(0), 1000);
@@ -72,7 +72,7 @@ const FileUpload: React.FC<FileUploadProps> = ({ onFileUpload, onNotification })
       const content = await response.text();
       const file = new File([content], filename, { type: 'text/plain' });
       await onFileUpload(file);
-    } catch (error) {
+    } catch {
       onNotification('error', 'Failed to Load Example', 'Could not load the example file');
     }
   };
@@ -95,7 +95,12 @@ const FileUpload: React.FC<FileUploadProps> = ({ onFileUpload, onNotification })
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ delay: 0.1 }}
-        {...getRootProps()}
+        onDrop={getRootProps().onDrop}
+        onDragOver={getRootProps().onDragOver}
+        onDragEnter={getRootProps().onDragEnter}
+        onDragLeave={getRootProps().onDragLeave}
+        style={{ cursor: 'pointer' }}
+        onClick={getRootProps().onClick}
         className={`
           relative border-2 border-dashed rounded-2xl p-12 text-center cursor-pointer transition-all duration-300
           ${isDragActive && !isDragReject 

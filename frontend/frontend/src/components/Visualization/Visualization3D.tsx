@@ -1,9 +1,10 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { OrbitControls, Grid, Text, Line, Sphere, Box } from '@react-three/drei';
+import { OrbitControls, Grid, Text, Line, Box } from '@react-three/drei';
 import { motion } from 'framer-motion';
+import * as THREE from 'three';
 import { Vector3, Color, BufferGeometry, Float32BufferAttribute } from 'three';
-import { SimulationData, SimulationState, Entity } from '../../types';
+import type { SimulationData, SimulationState, EntityData } from '../../types';
 
 interface Visualization3DProps {
   simulationData: SimulationData;
@@ -12,7 +13,7 @@ interface Visualization3DProps {
 }
 
 interface ParticleProps {
-  entity: Entity;
+  entity: EntityData;
   position: [number, number, number];
   velocity: [number, number, number];
   isQuantum?: boolean;
@@ -104,7 +105,7 @@ const Particle: React.FC<ParticleProps> = ({
         anchorX="center"
         anchorY="middle"
       >
-        {entity.name || `Entity ${entity.id}`}
+        {`Particle`}
       </Text>
     </group>
   );
@@ -181,21 +182,32 @@ const Scene: React.FC<{
   
   // Get current simulation frame data
   const getCurrentFrameData = () => {
-    if (!simulationData.entities || simulationData.entities.length === 0) {
+    const entitiesArray = Object.values(simulationData.entities || {});
+    if (entitiesArray.length === 0) {
       return { positions: [], velocities: [], entities: [] };
     }
     
-    const positions = simulationData.entities.map(entity => {
-      const pos = entity.trajectory?.[currentStep] || [0, 0, 0];
-      return pos as [number, number, number];
+    const positions = entitiesArray.map(entity => {
+      if (entity.time_series.type === 'object') {
+        const pos = entity.time_series.positions?.[currentStep] || [0, 0, 0];
+        return pos as [number, number, number];
+      } else {
+        const pos = entity.time_series.expected_position?.[currentStep] || [0, 0, 0];
+        return pos as [number, number, number];
+      }
     });
     
-    const velocities = simulationData.entities.map(entity => {
-      const vel = entity.velocities?.[currentStep] || [0, 0, 0];
-      return vel as [number, number, number];
+    const velocities = entitiesArray.map(entity => {
+      if (entity.time_series.type === 'object') {
+        const vel = entity.time_series.velocities?.[currentStep] || [0, 0, 0];
+        return vel as [number, number, number];
+      } else {
+        const vel = entity.time_series.expected_momentum?.[currentStep] || [0, 0, 0];
+        return vel as [number, number, number];
+      }
     });
     
-    return { positions, velocities, entities: simulationData.entities };
+    return { positions, velocities, entities: entitiesArray };
   };
 
   const { positions, velocities, entities } = getCurrentFrameData();
@@ -234,23 +246,23 @@ const Scene: React.FC<{
       {/* Particles */}
       {entities.map((entity, index) => (
         <Particle
-          key={entity.id}
+          key={index}
           entity={entity}
           position={positions[index] || [0, 0, 0]}
           velocity={velocities[index] || [0, 0, 0]}
-          isQuantum={simulationData.simulation_type === 'quantum'}
-          size={entity.mass ? Math.max(0.05, Math.min(0.3, entity.mass * 0.1)) : 0.1}
+          isQuantum={simulationData.simulation_parameters?.model_type === 'quantum'}
+          size={entity.initial_properties?.mass ? Math.max(0.05, Math.min(0.3, entity.initial_properties.mass * 1e30)) : 0.1}
         />
       ))}
 
       {/* Quantum wavefunction cloud */}
-      {simulationData.simulation_type === 'quantum' && 
+      {simulationData.simulation_parameters?.model_type === 'quantum' && 
        simulationData.quantum_data?.wavefunction_flat && 
        simulationData.quantum_data?.probability_density_flat && (
         <QuantumCloud
-          wavefunction={simulationData.quantum_data.wavefunction_flat}
-          probabilityDensity={simulationData.quantum_data.probability_density_flat}
-          gridSize={Math.round(Math.pow(simulationData.quantum_data.wavefunction_flat.length, 1/3))}
+          wavefunction={simulationData.quantum_data.wavefunction_flat.flat()}
+          probabilityDensity={simulationData.quantum_data.probability_density_flat.flat()}
+          gridSize={Math.round(Math.pow(simulationData.quantum_data.wavefunction_flat.flat().length, 1/3))}
           opacity={0.2}
         />
       )}
@@ -317,8 +329,8 @@ const Visualization3D: React.FC<Visualization3DProps> = ({
         <div className="glass-effect border border-gray-700 rounded-lg p-3">
           <h3 className="text-sm font-semibold text-white mb-2">Simulation</h3>
           <div className="space-y-1 text-xs text-gray-300">
-            <div>Type: {simulationData.simulation_type}</div>
-            <div>Entities: {simulationData.entities?.length || 0}</div>
+            <div>Type: {simulationData.simulation_parameters?.model_type}</div>
+            <div>Entities: {Object.keys(simulationData.entities || {}).length}</div>
             <div>Step: {simulationState.currentStep}</div>
             <div>Time: {simulationState.currentTime.toFixed(3)}s</div>
           </div>
@@ -343,7 +355,7 @@ const Visualization3D: React.FC<Visualization3DProps> = ({
       </Canvas>
 
       {/* Loading state */}
-      {!simulationData.entities || simulationData.entities.length === 0 && (
+      {!simulationData.entities || Object.keys(simulationData.entities).length === 0 && (
         <div className="absolute inset-0 flex items-center justify-center bg-gray-900/50 backdrop-blur-sm">
           <motion.div
             initial={{ opacity: 0, scale: 0.8 }}

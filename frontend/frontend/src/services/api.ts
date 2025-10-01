@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { SimulationData, APIResponse, SimulationRequest } from '../types';
+import type { SimulationData, APIResponse, SimulationRequest } from '../types';
 
 // Create axios instance with default config
 const api = axios.create({

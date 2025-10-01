@@ -69,8 +69,8 @@ export interface Interaction {
   source: string;
   target: string;
   properties: {
-    force?: string | { function: string; args: any[] };
-    potential?: string | { function: string; args: any[] };
+    force?: string | { function: string; args: unknown[] };
+    potential?: string | { function: string; args: unknown[] };
   };
 }
 
@@ -79,7 +79,12 @@ export interface SimulationData {
   entities: Record<string, EntityData>;
   simulation_parameters: SimulationParameters;
   interactions: Interaction[];
-  program?: any;
+  program?: Record<string, unknown>;
+  simulation_type?: 'classical' | 'quantum'; // For frontend compatibility
+  quantum_data?: {
+    wavefunction_flat: number[][];
+    probability_density_flat: number[][];
+  };
 }
 
 // Visualization types

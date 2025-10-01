@@ -1,9 +1,10 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { OrbitControls, Text, Line, Sphere, Box, Plane } from '@react-three/drei';
+import { Canvas, useFrame } from '@react-three/fiber';
+import { OrbitControls, Text, Line, Box, Plane } from '@react-three/drei';
 import { motion } from 'framer-motion';
-import { Vector3, Color, BufferGeometry, Float32BufferAttribute, Points, PointsMaterial, AdditiveBlending } from 'three';
-import { SimulationData, SimulationState } from '../../types';
+import * as THREE from 'three';
+import { Color, BufferGeometry, Float32BufferAttribute, Points, AdditiveBlending } from 'three';
+import type { SimulationData, SimulationState } from '../../types';
 
 interface QuantumVisualizationProps {
   simulationData: SimulationData;
@@ -35,7 +36,7 @@ const WaveFunctionVisualization: React.FC<WaveFunctionVisualizationProps> = ({
   opacity = 0.6 
 }) => {
   const pointsRef = useRef<Points>(null);
-  const [colorMap, setColorMap] = useState<Float32Array>(new Float32Array(0));
+  // const [colorMap, setColorMap] = useState<Float32Array>(new Float32Array(0));
   
   useEffect(() => {
     if (!pointsRef.current || !probabilityDensity || !wavefunction) return;
@@ -92,7 +93,7 @@ const WaveFunctionVisualization: React.FC<WaveFunctionVisualizationProps> = ({
       pointsRef.current.geometry = geometry;
     }
     
-    setColorMap(new Float32Array(colors));
+    // setColorMap(new Float32Array(colors));
   }, [probabilityDensity, wavefunction, gridSize, timeStep]);
 
   return (
@@ -364,7 +365,7 @@ const QuantumVisualization: React.FC<QuantumVisualizationProps> = ({
         )}
 
         {/* Quantum particles with uncertainty */}
-        {simulationData.entities?.map((entity, index) => {
+        {Object.entries(simulationData.entities || {}).map(([key, entity], index) => {
           const position = entity.trajectory?.[currentStep] || [0, 0, 0];
           const velocity = entity.velocities?.[currentStep] || [0, 0, 0];
           

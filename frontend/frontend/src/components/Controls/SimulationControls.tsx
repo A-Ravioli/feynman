@@ -1,7 +1,7 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import { Play, Pause, Square, RotateCcw, SkipBack, SkipForward } from 'lucide-react';
-import { SimulationData, SimulationState } from '../../types';
+import type { SimulationData, SimulationState } from '../../types';
 
 interface SimulationControlsProps {
   simulationData: SimulationData;

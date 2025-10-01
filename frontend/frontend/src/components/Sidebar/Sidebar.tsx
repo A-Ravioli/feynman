@@ -11,7 +11,7 @@ import {
   Settings,
   Zap
 } from 'lucide-react';
-import { NavigationItem } from '../../types';
+import type { NavigationItem } from '../../types';
 
 interface SidebarProps {
   items: NavigationItem[];
@@ -33,18 +33,10 @@ const iconMap = {
 const Sidebar: React.FC<SidebarProps> = ({ items, collapsed, onItemClick, onToggle }) => {
   const sidebarVariants = {
     expanded: {
-      width: 256,
-      transition: {
-        duration: 0.3,
-        ease: 'easeInOut'
-      }
+      width: 256
     },
     collapsed: {
-      width: 64,
-      transition: {
-        duration: 0.3,
-        ease: 'easeInOut'
-      }
+      width: 64
     }
   };
 

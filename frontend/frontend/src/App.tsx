@@ -1,19 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  Play, 
-  Pause, 
-  Square, 
-  RotateCcw, 
-  Upload, 
   Settings, 
   Activity,
-  Zap,
-  Cpu,
-  MonitorSpeaker,
-  FileText,
-  BarChart3,
-  Globe,
   Atom,
   Waves
 } from 'lucide-react';
@@ -27,7 +16,7 @@ import FileUpload from './components/FileUpload/FileUpload';
 import NotificationCenter from './components/Notifications/NotificationCenter';
 import PerformanceMonitor from './components/Performance/PerformanceMonitor';
 
-import { SimulationData, SimulationState, NavigationItem, NotificationMessage } from './types';
+import type { SimulationData, SimulationState, NavigationItem, NotificationMessage } from './types';
 import { simulationAPI } from './services/api';
 
 interface AppState {
@@ -96,11 +85,6 @@ const App: React.FC = () => {
     },
   ];
 
-  // Load simulation data on component mount
-  useEffect(() => {
-    loadDefaultSimulation();
-  }, []);
-
   const loadDefaultSimulation = async () => {
     try {
       // Try to load existing results
@@ -122,6 +106,11 @@ const App: React.FC = () => {
     }
   };
 
+  // Load simulation data on component mount
+  useEffect(() => {
+    loadDefaultSimulation();
+  }, [loadDefaultSimulation]);
+
   const handleTabChange = (tabId: string) => {
     setAppState(prev => ({
       ...prev,
@@ -138,17 +127,17 @@ const App: React.FC = () => {
       if (result.success && result.data) {
         setAppState(prev => ({
           ...prev,
-          simulationData: result.data,
+          simulationData: result.data || null,
           simulationState: {
             ...prev.simulationState,
             isLoaded: true,
             currentTime: 0,
             currentStep: 0,
           },
-          activeTab: result.data.simulation_type === 'quantum' ? 'quantum' : 'visualization',
+          activeTab: result.data?.simulation_parameters?.model_type === 'quantum' ? 'quantum' : 'visualization',
         }));
         
-        const simType = result.data.simulation_type === 'quantum' ? 'quantum' : 'classical';
+        const simType = result.data?.simulation_parameters?.model_type === 'quantum' ? 'quantum' : 'classical';
         addNotification('success', 'Simulation Complete', `${simType} physics simulation completed successfully!`);
       } else {
         throw new Error(result.error || 'Simulation failed');
@@ -216,10 +205,16 @@ const App: React.FC = () => {
         return (
           <Visualization3D
             simulationData={appState.simulationData || {
-              simulation_type: 'classical',
-              entities: [],
               time_points: [],
-              simulation_parameters: { model_type: 'classical' }
+              entities: {},
+              simulation_parameters: {
+                time_start: 0,
+                time_end: 1,
+                time_step: 0.1,
+                model_type: 'classical'
+              },
+              interactions: [],
+              simulation_type: 'classical'
             }}
             simulationState={appState.simulationState}
             className="h-full"
@@ -227,7 +222,7 @@ const App: React.FC = () => {
         );
       
       case 'quantum':
-        return appState.simulationData?.simulation_type === 'quantum' ? (
+        return appState.simulationData?.simulation_parameters?.model_type === 'quantum' ? (
           <QuantumVisualization
             simulationData={appState.simulationData}
             simulationState={appState.simulationState}
@@ -326,7 +321,7 @@ const App: React.FC = () => {
                   : 'bg-gray-700 hover:bg-gray-600 text-gray-300'
               }`}
             >
-              <Cpu className="w-5 h-5" />
+              <Activity className="w-5 h-5" />
             </button>
 
             {/* Status indicator */}

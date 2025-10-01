@@ -24,12 +24,12 @@ import {
   AreaChart,
   Area,
   PieChart as RechartsPieChart,
+  Pie,
   Cell,
-  BarChart as RechartsBarChart,
-  Bar
+
 } from 'recharts';
 
-import { SimulationData, SimulationState } from '../../types';
+import type { SimulationData, SimulationState } from '../../types';
 
 interface DashboardProps {
   simulationData: SimulationData | null;
@@ -116,12 +116,12 @@ const Dashboard: React.FC<DashboardProps> = ({ simulationData, simulationState }
 
     // Calculate energy metrics for classical simulations
     let totalEnergy = 0;
-    let energyData: Array<{ time: number; kinetic: number; potential: number; total: number }> = [];
+    const energyData: Array<{ time: number; kinetic: number; potential: number; total: number }> = [];
     
     if (simulationType === 'classical') {
       simulationData.time_points.forEach((time, index) => {
         let kineticSum = 0;
-        let potentialSum = 0;
+        const potentialSum = 0;
 
         entities.forEach(entity => {
           if (entity.time_series.type === 'object') {
@@ -188,7 +188,7 @@ const Dashboard: React.FC<DashboardProps> = ({ simulationData, simulationState }
     }));
 
     // Performance data (mock for now)
-    const performanceData = simulationData.time_points.slice(0, 10).map((time, index) => ({
+    const performanceData = simulationData.time_points.slice(0, 10).map((time) => ({
       time: parseFloat(time.toFixed(3)),
       fps: 60 - Math.random() * 5,
       memory: 45 + Math.random() * 10,
@@ -416,8 +416,8 @@ const Dashboard: React.FC<DashboardProps> = ({ simulationData, simulationState }
                   paddingAngle={5}
                   dataKey="value"
                 >
-                  {metrics.entityDistribution.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
+                  {metrics.entityDistribution.map((entry, entryIndex) => (
+                    <Cell key={`cell-${entryIndex}`} fill={entry.color} />
                   ))}
                 </Pie>
                 <Tooltip 
